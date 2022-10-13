@@ -42,44 +42,42 @@ int main(int argc, char **argv)
     // outer loop over vector lengths
     for (int j = 0; j < thread_options.size(); j++)
     {
-        // save data struc
-        std::vector<float> log_add;
-
-        int n_threads = thread_options[j];
-        int n_blocks = (N + n_threads - 1) / n_threads;
-
-        for (int i = 0; i < 10; i++)
+        for (int m = 0; m < thread_options.size(); m++)
         {
-            // + operation
-            cudaDeviceSynchronize();
-            timer.reset();
-            std::cout << "check point pre add"<<"\n";
-            //<<<<n_blocks, n_threads/block>>>
-            add<<<n_blocks, n_threads>>>(N, d_x, d_y, d_z);
-            std::cout << "check point add"<<"\n";
-            cudaDeviceSynchronize();
-            float elapsed_time_add = timer.get();
-            log_add.push_back(elapsed_time_add);
+            // save data struc
+            std::vector<float> log_add;
+
+            int n_threads = thread_options[j];
+            int n_blocks = thread_options[m];
+
+            for (int i = 0; i < 10; i++)
+            {
+                // + operation
+                cudaDeviceSynchronize();
+                timer.reset();
+                //<<<<n_blocks, n_threads/block>>>
+                add<<<n_blocks, n_threads>>>(N, d_x, d_y, d_z);
+                cudaDeviceSynchronize();
+                float elapsed_time_add = timer.get();
+                log_add.push_back(elapsed_time_add);
+            }
+            // copy data back (implicit synchronization point)
+            cudaMemcpy(z, d_z, N * sizeof(double), cudaMemcpyDeviceToHost);
+
+            // build averages
+            float log_add_av = std::accumulate(log_add.begin(), log_add.end(), 0.0 / log_add.size());
+
+            // output
+            std::cout << n_blocks << " " << n_threads << " " << log_add_av << std::endl;
         }
-        // copy data back (implicit synchronization point)
-        cudaMemcpy(z, d_z, N * sizeof(double), cudaMemcpyDeviceToHost);
-
-        // build averages
-        float log_add_av = std::accumulate(log_add.begin(), log_add.end(), 0.0 / log_add.size());
-
-        // N t_cpy t_fr
-        std::cout << n_blocks << " " << n_threads << " " << log_add_av << std::endl;
-
-        std::cout << "check point1"<<"\n";
-
-        free(x);
-        free(y);
-        cudaFree(d_x);
-        cudaFree(d_y);
-
-        std::cout << "check point2"<<"\n";
-
     }
+        
+    free(x);
+    free(y);
+    free(z);
+    cudaFree(d_x);
+    cudaFree(d_y);
+    cudaFree(d_z);
 
     return EXIT_SUCCESS;
 }

@@ -7,9 +7,13 @@
 
 __global__ void add(int n, double *x, double *y, double *z)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n)
+    const int total_threads = blockDim.x * gridDim.x; // number of threads
+    int id = blockIdx.x * blockDim.x + threadIdx.x;   // #block    #threads/block   #offset within block
+
+    for (unsigned int i = id; i < n; i += total_threads)
+    {
         z[i] = x[i] + y[i];
+    }
 }
 
 int main(int argc, char **argv)
@@ -71,7 +75,7 @@ int main(int argc, char **argv)
             std::cout << n_blocks << " " << n_threads << " " << log_add_av << std::endl;
         }
     }
-        
+
     free(x);
     free(y);
     free(z);

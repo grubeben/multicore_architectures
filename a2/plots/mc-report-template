@@ -1,0 +1,55 @@
+\documentclass[a4paper]{scrartcl}
+\usepackage[a4paper,top=3cm,left=3cm,right=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[naustrian]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,enumerate}
+\usepackage[donotfixamsmathbugs]{mathtools}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{subfig}
+\usepackage{float}
+\usepackage{mdframed}
+\usepackage{ifsym}
+\usepackage{scrlayer-scrpage}
+\usepackage{algpseudocode}
+\pagestyle{scrheadings}
+
+\newcounter{Exernumb}
+\newenvironment{exercise}[1][Aufgabenname]%
+   {\stepcounter{Exernumb}\vspace{1em}%
+    \setlength{\fboxsep}{2.5mm}%
+    \noindent
+    \framebox[\textwidth][l]{%
+    \textbf{\textsf{Task \theExernumb\ (#1)}}%
+    }
+    \normalfont
+   }%
+   {%
+   }
+\newenvironment{subexercises}%
+   {\begin{enumerate}[(a)]}%
+   {\end{enumerate}}
+
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\newcommand{\Mod}[1]{\ \mathrm{mod}\ #1}
+
+\title{Exercise 1}
+\subtitle{Computational Science on Many-Core Architectures (WS 2022)}
+\author{Foo, Foo2 (00101010)}
+
+\automark{section}
+\ohead{\pagemark}
+\makeatletter
+\chead{Exercise X -- \@author}
+\makeatother
+\cfoot{}
+
+\begin{document}
+\maketitle
+
+\begin{exercise}[This is Task 1]
+  Cuda \& co
+\end{exercise}
+
+\end{document}

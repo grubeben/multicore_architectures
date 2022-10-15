@@ -1,27 +1,23 @@
 
 
 #include <stdio.h>
-//included in online evironment
+// included in online evironment
 #include "timer.hpp"
 #include <iostream>
 #include <vector>
 #include <numeric>
 
-
 int main(int argc, char **argv)
 {
     // initialize vector lengths
-    std::vector<int> n = {10, 100, 1000, 10000, 100000, 1000000, 10000000};
-    // save data struc
-    std::vector<std::vector<float>> times_N;
+    std::vector<int> n = {100, 500, 1000, 5000, 10000, 50000, 100000, 500000};
+
     // outer loop over vector lengths
     for (int j = 0; j < n.size(); j++)
     {
         int N = n[j];
-        double *x, *d_x;
+        double *d_x;
         Timer timer;
-        // Allocate host memory
-        x = (double *)malloc(N * sizeof(double));
 
         // save data struc
         std::vector<float> log_al;
@@ -52,14 +48,6 @@ int main(int argc, char **argv)
 
         // N t_al t_fr
         std::cout << N << " " << log_al_av << " " << log_fr_av << std::endl;
-
-        std::vector<float> time_N;
-        time_N.push_back(log_al_av);
-        time_N.push_back(log_fr_av);
-
-        times_N.push_back(time_N);
-
-        free(x);
     }
 
     return EXIT_SUCCESS;

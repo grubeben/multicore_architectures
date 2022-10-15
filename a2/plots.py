@@ -8,7 +8,7 @@ filepath1 = "data/basic_cuda_a.txt"
 data_a = np.genfromtxt(filepath1, dtype=float, delimiter=' ')
 filepath1a = "data/basic_cuda_a2.txt"
 data_a2 = np.genfromtxt(filepath1a, dtype=float, delimiter=' ')
-filepath2 = "data/basic_cuda_b.txt"
+filepath2 = "data/basic_cuda_b2.txt"
 data_b = np.genfromtxt(filepath2, dtype=float, delimiter=' ')
 filepath3 = "data/basic_cuda_c.txt"
 data_c= np.genfromtxt(filepath3, dtype=float, delimiter=' ')

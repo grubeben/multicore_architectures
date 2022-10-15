@@ -5,25 +5,22 @@
 #include <vector>
 #include <numeric>
 
-// https://stackoverflow.com/questions/55683408/cuda-data-initialization
+__device__ double *d_y;                    //*d_y now is a uninitialized variable on GPU memory
+__global__ void initMemory(int vectorsize) 
+{
+    cudaMalloc(&d_y, sizeof(double) * vectorsize); // allocate memory
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
 
- __device__ double *d_y;
- void initMemory(int vectorsize){
-    double *d_yy;
-    cudaMalloc(&d_yy,sizeof(double)*vectorsize);
-    double* d_yyy = new double[vectorsize];
-    for (int i=0; i<vectorsize; i++){
-        d_yyy[i]=2.0;
+    for (int i = id; i < vectorsize; i += blockDim.x * gridDim.x) // initiate
+    {
+        d_y[i] = i;
     }
-    cudaMemcpy(d_yy,d_yyy,sizeof(double)*vectorsize,cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_y,&d_yy,sizeof(d_yy),0,cudaMemcpyHostToDevice);
- }
+}
 
-
-int main(int argc, char **argv)
+    main(int argc, char **argv)
 {
     // initicpyize vector lengths
-    std::vector<int> n = {10, 100, 1000, 10000, 100000, 1000000, 10000000};
+    std::vector<int> n = {100, 1000, 10000, 100000, 1000000, 10000000};
     // save data struc
     std::vector<std::vector<float>> times_N;
     Timer timer;
@@ -31,7 +28,7 @@ int main(int argc, char **argv)
     for (int j = 0; j < n.size(); j++)
     {
         int N = n[j];
-        
+
         // save data struc
         std::vector<float> log_cpy;
         std::vector<float> log_fr;
@@ -42,9 +39,10 @@ int main(int argc, char **argv)
             double *x, *d_x;
             cudaDeviceSynchronize();
             timer.reset();
-            x = (double *) malloc(N*sizeof(double));
+            x = (double *)malloc(N * sizeof(double));
             cudaMalloc(&d_x, N * sizeof(double));
-            for (int k = 0; k < N; k++){
+            for (int k = 0; k < N; k++)
+            {
                 x[k] = 1.0;
             }
             cudaMemcpy(d_x, x, N * sizeof(double), cudaMemcpyHostToDevice);
@@ -55,14 +53,14 @@ int main(int argc, char **argv)
             // allociate device memory and initiate in kernel
             cudaDeviceSynchronize();
             timer.reset();
-            initMemory(N);
+            initMemory<<<256,256>>>(N);
             cudaDeviceSynchronize();
             float elapsed_time_fr = timer.get();
             log_fr.push_back(elapsed_time_fr);
 
             free(x);
             cudaFree(d_x);
-            double* del;
+            double *del;
             cudaMemcpyFromSymbol(&del, d_y, sizeof(del), 0, cudaMemcpyDeviceToHost);
             cudaFree(del);
         }

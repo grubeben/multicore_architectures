@@ -137,26 +137,25 @@ plt.title("BASIC CUDA <<< #blocks, #threads/block>>> configurations")
 # plt.grid()
 plt.savefig("plots/basic_cuda_e.jpg", bbox_inches='tight')
 
-"""
+
 #plot_dot
 vectorlength=[]
 time_coop=[]
 time_2ker=[]
 for i in range(len(data_dot)):
-    vectorlength.append(data_b[i][0])
-    time_coop.append(data_b[i][2])
-    time_2ker.append(data_b[i][1])
+    vectorlength.append(data_dot[i][0])
+    time_coop.append(data_dot[i][2])
+    time_2ker.append(data_dot[i][1])
 
 plt.figure(figsize=(10,5))
 plt.plot(vectorlength, time_coop , label = "time GPU/CPU cooperation")
 plt.plot(vectorlength, time_2ker , label = "time two-kernel operation")
 # plt.plot(vectorlength, data , label = "time")
 plt.xscale('log', base=10)
-plt.yscale('log', base=2)
+#plt.yscale('log', base=2)
 plt.xlabel("vectorlength N")
 plt.ylabel("time [s]")
 plt.legend()
 plt.title("CUDA dot product 2 options")
 plt.grid()
 plt.savefig("plots/cuda_dot.jpg", bbox_inches='tight')
-"""

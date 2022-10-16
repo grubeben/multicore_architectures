@@ -21,7 +21,7 @@ __global__ void dot_s1(int n, double *x, double *y, double *z_scalar)
 
     // parallel primitives - stride
     temp[threadIdx.x] = thread_pprod;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+    for (unsigned int stride = blockDim.x / 2; stride > 0; stride /= 2)
     {
         __syncthreads();
         if (threadIdx.x < stride)
@@ -52,7 +52,7 @@ __global__ void dot_s2(double *z_scalar)
     // since we only have one block temp[0] holds our sum now
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
     std::vector<int> n = {100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000}; // initialize vector lengths
     Timer timer;                                                                                 // load timer
@@ -77,20 +77,25 @@ int main(int argc, char **argv)
         {
             x[k] = 1.0;
             y[k] = 1.0;
+        }
+
+        for (int k = 0; k < 256; k++)
+        {
             z_vec[k] = 0.0;
             z_scalar[k] = 0.0;
         }
         cudaMemcpy(d_x, x, N * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(d_y, y, N * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_z_vec, z_vec, N * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_z_scalar, z_scalar, N * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_z_vec, z_vec, 256 * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_z_scalar, z_scalar, 256 * sizeof(double), cudaMemcpyHostToDevice);
 
         // vecs for averaging
         std::vector<float> log_dot_v1;
         std::vector<float> log_dot_v2;
 
-        for (int i = 0; i < 1; i++)
+        for (int average_count = 0; average_count < 1; average_count++)
         {
+
             //  dot operation via 2 kernels
             cudaDeviceSynchronize();
             timer.reset();
@@ -100,7 +105,7 @@ int main(int argc, char **argv)
             cudaDeviceSynchronize();
             float elapsed_time_dot_v1 = timer.get();
             log_dot_v1.push_back(elapsed_time_dot_v1);
-            std::cout << "dotp1:" << z_scalar[0] << "\n";
+            //std::cout << "dotp1:" << z_scalar[0] << "\n";
 
             // dot operation with GPU/CPU cooperation
             cudaDeviceSynchronize();
@@ -111,7 +116,7 @@ int main(int argc, char **argv)
             cudaDeviceSynchronize();
             float elapsed_time_dot_v2 = timer.get();
             log_dot_v2.push_back(elapsed_time_dot_v2);
-            std::cout << "dotp2:" << z_scalar_2 << "\n";
+            //std::cout << "dotp2:" << z_scalar_2 << "\n";
         }
 
         // build averages
@@ -121,14 +126,14 @@ int main(int argc, char **argv)
         // output
         std::cout << N << " " << log_dot1_av << " " << log_dot2_av << std::endl;
 
-        free(x);
-        free(y);
-        free(z_scalar);
-        free(z_vec);
         cudaFree(d_x);
         cudaFree(d_y);
         cudaFree(d_z_vec);
         cudaFree(d_z_scalar);
+        free(x);
+        free(y);
+        free(z_scalar);
+        free(z_vec);
     }
 
     return EXIT_SUCCESS;

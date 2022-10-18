@@ -1,0 +1,132 @@
+#include <stdio.h>
+// included in online evironment
+#include "timer.hpp"
+#include <iostream>
+#include <vector>
+#include <numeric>
+
+/*
+TODOs:
+- calculate mem bandwidth
+- understand shit
+*/
+
+__global__ void add_kth(int n, int k, int total_ops, double *x, double *y, double *z_kth)
+{
+    const int total_threads = blockDim.x * gridDim.x; // number of threads
+    int id = blockIdx.x * blockDim.x + threadIdx.x;   // #block    #threads/block   #offset within block
+
+    for (unsigned int i = id; i < total_ops; i += total_threads)
+    {
+        z_kth[i * k] = x[i * k] + y[i * k];
+    }
+}
+
+__global__ void add_skip(int n, int k, double *x, double *y, double *z_skip)
+{
+    const int total_threads = blockDim.x * gridDim.x; // number of threads
+    int id = blockIdx.x * blockDim.x + threadIdx.x;   // #block    #threads/block   #offset within block
+
+    for (unsigned int i = id; i < n - k; i += total_threads)
+    {
+        z_skip[i + k] = x[i + k] + y[i + k];
+    }
+}
+
+int main(int argc, char **argv)
+{
+    // initialiize vector holding stide size
+    const int ks = 63;
+    std::vector<int> k_vec(ks);
+    std::iota(k_vec.begin(), k_vec.end(), 1);
+
+    // initialiize vector length
+    int N = 100000000;
+
+    // allocate device memory and initiate via copy
+    double *x, *d_x, *y, *d_y, *z_kth, *d_z_kth, *z_skip, *d_z_skip;
+    x = (double *)malloc(N * sizeof(double));
+    y = (double *)malloc(N * sizeof(double));
+    z_kth = (double *)malloc(N * sizeof(double));
+    z_skip = (double *)malloc(N * sizeof(double));
+    cudaMalloc(&d_x, N * sizeof(double));
+    cudaMalloc(&d_y, N * sizeof(double));
+    cudaMalloc(&d_z_kth, N * sizeof(double));
+    cudaMalloc(&d_z_skip, N * sizeof(double));
+
+    for (int k = 0; k < N; k++)
+    {
+        x[k] = 1.0;
+        y[k] = 2.0;
+        z_kth[k] = 0.0;
+        z_skip[k] = 0.0;
+    }
+
+    cudaMemcpy(d_x, x, N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z_kth, z_kth, N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z_skip, z_skip, N * sizeof(double), cudaMemcpyHostToDevice);
+
+    // load timer
+    Timer timer;
+
+    // outer loop over stride size
+    for (int h = 0; h < k_vec.size(); h++)
+    {
+        int k = k_vec[h];
+
+        // number of operations needed
+        int total_ops_kth = std::floor(N / k);
+
+        // save data struc
+        std::vector<float> log_kth;
+        std::vector<float> log_skip;
+
+        for (int i = 0; i < 10; i++)
+        {
+            // define kernel parameters
+            int n_threads = 256;
+            int n_blocks = 256; // int n_blocks = (N + n_threads - 1) / n_threads;
+
+            // + operation for every kth element
+            cudaDeviceSynchronize();
+            timer.reset();
+            add_kth<<<n_blocks, n_threads>>>(N, k, total_ops_kth, d_x, d_y, d_z_kth);
+            cudaDeviceSynchronize();
+            float elapsed_time_kth = timer.get();
+            log_kth.push_back(elapsed_time_kth);
+
+            // + operation wihtout the first k elements
+            cudaDeviceSynchronize();
+            timer.reset();
+            add_skip<<<n_blocks, n_threads>>>(N, k, d_x, d_y, d_z_skip);
+            cudaDeviceSynchronize();
+            float elapsed_time_skip = timer.get();
+            log_skip.push_back(elapsed_time_skip);
+        }
+        // for validation
+        /*
+                cudaMemcpy(z_kth, d_z_kth, N * sizeof(double), cudaMemcpyDeviceToHost);
+                cudaMemcpy(z_skip, d_z_kth, N * sizeof(double), cudaMemcpyDeviceToHost);
+                std::cout << z_kth[0]<< " " << z_skip[k+1]<< std::endl;
+        */
+
+        // build averages
+        float log_add_kth = std::accumulate(log_kth.begin(), log_kth.end(), 0.0 / log_kth.size());
+        float log_add_skip = std::accumulate(log_skip.begin(), log_skip.end(), 0.0 / log_skip.size());
+
+        // output averages
+        std::cout << k << " " << log_add_kth << " " << log_add_skip << std::endl;
+    }
+
+    free(x);
+    free(y);
+    free(z_kth);
+    free(z_skip);
+    cudaFree(d_x);
+    cudaFree(d_y);
+    cudaFree(d_z_kth);
+    cudaFree(d_z_skip);
+
+    return EXIT_SUCCESS;
+}

@@ -11,6 +11,8 @@ TODOs:
 - understand shit
 */
 
+
+
 __global__ void add_kth(int n, int k, int total_ops, double *x, double *y, double *z_kth)
 {
     const int total_threads = blockDim.x * gridDim.x; // number of threads

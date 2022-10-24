@@ -18,7 +18,7 @@ __global__ void add_kth(int n, int k, int total_ops, double *x, double *y, doubl
 
     for (unsigned int i = id; i < total_ops; i += total_threads)
     {
-        z_kth[i * k] = x[i * k] + y[i * k];
+        z_kth[i * k] = x[i * k] + y[i * k]; // N/k*((2*Br + 1*Br)/10^9)/timer with B=sizeof(double)=8 bytes
     }
 }
 
@@ -29,7 +29,7 @@ __global__ void add_skip(int n, int k, double *x, double *y, double *z_skip)
 
     for (unsigned int i = id; i < n - k; i += total_threads)
     {
-        z_skip[i + k] = x[i + k] + y[i + k];
+        z_skip[i + k] = x[i + k] + y[i + k]; // (N-k)*((2*Br + 1*Br)/10^9)/timer with B=sizeof(double)=8 bytes
     }
 }
 
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
         std::vector<float> log_kth;
         std::vector<float> log_skip;
 
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 11; i++)
         {
             // define kernel parameters
             int n_threads = 256;
@@ -94,7 +94,10 @@ int main(int argc, char **argv)
             add_kth<<<n_blocks, n_threads>>>(N, k, total_ops_kth, d_x, d_y, d_z_kth);
             cudaDeviceSynchronize();
             float elapsed_time_kth = timer.get();
-            log_kth.push_back(elapsed_time_kth);
+            if (i > 0) // during first un GPU has to warm up
+            {
+                log_kth.push_back(elapsed_time_kth);
+            }
 
             // + operation wihtout the first k elements
             cudaDeviceSynchronize();
@@ -102,7 +105,10 @@ int main(int argc, char **argv)
             add_skip<<<n_blocks, n_threads>>>(N, k, d_x, d_y, d_z_skip);
             cudaDeviceSynchronize();
             float elapsed_time_skip = timer.get();
-            log_skip.push_back(elapsed_time_skip);
+            if (i > 0) // during first un GPU has to warm up
+            {
+                log_skip.push_back(elapsed_time_skip);
+            }
         }
         // for validation
         /*
@@ -113,7 +119,9 @@ int main(int argc, char **argv)
 
         // build averages
         float log_add_kth = std::accumulate(log_kth.begin(), log_kth.end(), 0.0 / log_kth.size());
+        log_add_kth /= log_kth.size();
         float log_add_skip = std::accumulate(log_skip.begin(), log_skip.end(), 0.0 / log_skip.size());
+        log_add_kth /= log_kth.size();
 
         // output averages
         std::cout << k << " " << log_add_kth << " " << log_add_skip << std::endl;

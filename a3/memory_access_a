@@ -11,8 +11,6 @@ TODOs:
 - understand shit
 */
 
-
-
 __global__ void add_kth(int n, int k, int total_ops, double *x, double *y, double *z_kth)
 {
     const int total_threads = blockDim.x * gridDim.x; // number of threads
@@ -120,13 +118,13 @@ int main(int argc, char **argv)
         */
 
         // build averages
-        float log_add_kth = std::accumulate(log_kth.begin(), log_kth.end(), 0.0 / log_kth.size());
+        float log_add_kth = std::accumulate(log_kth.begin(), log_kth.end(), 0.0);
         log_add_kth /= log_kth.size();
-        float log_add_skip = std::accumulate(log_skip.begin(), log_skip.end(), 0.0 / log_skip.size());
-        log_add_kth /= log_kth.size();
+        float log_add_skip = std::accumulate(log_skip.begin(), log_skip.end(), 0.0);
+        log_add_skip /= log_skip.size();
 
         // output averages
-        std::cout << k << " " << log_add_kth << " " << log_add_skip << std::endl;
+        std::cout << k << " " << (3 * N * sizeof(double) * 1e-9) / (k * log_add_kth) << " " << (3 * (N - k) * sizeof(double) * 1e-9) / log_add_skip << std::endl;
     }
 
     free(x);

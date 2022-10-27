@@ -6,16 +6,6 @@
 #include "timer.hpp"
 #include "cuda_errchk.hpp" // for error checking of CUDA calls
 
-/*
-a) missing free() statements
-b) PROBLEM WITH CURRENT IMPLEMENTATION
-for N= 100 the kernel launches with threads=<(100+255)/ 256,256> = 256 threads
-BUT array A holds 100x100 values that need to be exchanged. Currently, the global tranpose
-funtion does not account for the case that A.size() > total_threads. Hence, we need to implement
-a loop that enables the same thread to access multiple matrix entries.
-c)
-*/
-
 __global__ void vanilla_transpose(double *A, double *B, int N)
 {
     int t_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -23,35 +13,65 @@ __global__ void vanilla_transpose(double *A, double *B, int N)
     int row_idx = t_idx / N;
     int col_idx = t_idx % N;
 
-    for (int j = row_idx; j < N; j += (int)(total_threads / N))
+    while (row_idx < N)
     {
-        int to = j * N + col_idx;
-        int from = col_idx * N + j;
-        // printf("from: %d, to: %d \n", from, to); //show operations
-        B[to] = A[from];
-        col_idx = (col_idx + total_threads % N) % N;
+        int to = row_idx * N + col_idx;
+        int from = col_idx * N + row_idx;
+        // printf("th_id: %d, [%d,%d]  \n", t_idx, row_idx, col_idx);
+        if (to != from) // diagonal is constant
+        {
+            B[to] = A[from];
+        }
+        row_idx += (int)((col_idx + total_threads) / N);
+        col_idx = (col_idx + total_threads % N) % N; // col_idx = ((col_idx + total_threads) % N;
     }
 }
 
-/*
-__global__ void stride_optimal_transpose(double *A, int N)
+__global__ void stride_optimal_attempt_transpose(double *A, double *B, int N)
 {
     int t_idx = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int total_threads = blockDim.x * gridDim.x;
-    int row_idx = t_idx / N;
-    int col_idx = t_idx % N;
+    int elements_per_thread = N * N / total_threads;
 
-    for (int j = row_idx; j < N; j += (int)(total_threads / N))
+    // printf("elements per thread: %d\n", elements_per_thread);
+
+    int row_idx = (t_idx * elements_per_thread) / N;
+    int col_idx = (t_idx * elements_per_thread) % N;
+    int col_idx_old;
+    int row_idx_old;
+
+    while (row_idx < N)
     {
-        int to= j * N + col_idx;
-        int from = col_idx * N + j;
-        // printf("from: %d, to: %d \n", from, to); //show operations
-        B[to] = A[from];
-        col_idx = (col_idx + total_threads % N) % N;
-
+        // printf("UPDATE th_id: %d, [%d,%d]  \n", t_idx, row_idx, col_idx);
+        for (int j = 0; j < elements_per_thread; j++)
+        {
+            int to = row_idx * N + col_idx;
+            int from = col_idx * N + row_idx;
+            if (to != from) // diagonal is constant
+            {
+                B[to] = A[from];
+            }
+            if (row_idx < N)
+            {
+                // store old values
+                col_idx_old = col_idx;
+                row_idx_old = row_idx;
+                // printf("th_id: %d, [%d,%d]  \n", t_idx, row_idx, col_idx);
+                row_idx = (int)row_idx + (col_idx + 1) / N;
+                col_idx = ((col_idx + 1) % N);
+            }
+            else
+            {
+                j = elements_per_thread - 1;
+            }
+        }
+        // correct for inner loop
+        row_idx = row_idx_old;
+        col_idx = (col_idx_old + (elements_per_thread * (total_threads - 1)) % N) % N;
+        row_idx += ((col_idx_old + elements_per_thread * (total_threads - 1)) / N);
     }
 }
-*/
+
 __global__ void in_place_transpose(double *A, int N)
 {
     int t_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -59,25 +79,22 @@ __global__ void in_place_transpose(double *A, int N)
     int row_idx = t_idx / N;
     int col_idx = t_idx % N;
 
-    // only access upper triangular entries
-    if (row_idx < col_idx)
+    while (row_idx < (N - 1) && col_idx < N && row_idx < col_idx) // A[N-1,N] is the last entry we change
     {
-        while (row_idx < (N - 1) && col_idx < N) // A[N-1,N] is the last entry we change
-        {
-            int to = row_idx * N + col_idx;
-            int from = col_idx * N + row_idx;
+        int to = row_idx * N + col_idx;
+        int from = col_idx * N + row_idx;
 
-            if (from != to) // daigonal is constant
-            {
-                printf("from: %d, to: %d \n", from, to); // show operations
-                int temp = A[to];
-                A[to] = A[from];
-                A[from] = temp;
-            }
-            // assign next matrix entry to thread (FAULTY)
-            row_idx += (int)(total_threads / (N - row_idx - 1));
-            col_idx = (col_idx + (total_threads % (N - row_idx - 1)) % (N - row_idx - 1));
+        if (from != to) // daigonal is constant
+        {
+            int temp = A[to];
+            A[to] = A[from];
+            A[from] = temp;
         }
+        printf("th_id: %d, [%d,%d]  \n", t_idx, row_idx, col_idx);
+        int row_idx_old = row_idx;
+        row_idx += (int)((col_idx + total_threads) / (N - row_idx));
+        col_idx = (((col_idx + total_threads) % N) + row_idx);
+        printf("AFTER th_id: %d, [%d,%d]  \n", t_idx, row_idx, col_idx);
     }
 }
 
@@ -97,7 +114,7 @@ void print_A(double *A, int N)
 int main(void)
 {
 
-    int N = 3;
+    int N = 5;
 
     double *A, *cuda_A, *B, *cuda_B, *C, *cuda_C;
     Timer timer;
@@ -126,6 +143,7 @@ int main(void)
 
     // save data struc
     std::vector<float> log_vanilla_time;
+    std::vector<float> log_stride_optimal_attempt_time;
     std::vector<float> log_in_place_time;
 
     print_A(A, N);
@@ -138,13 +156,26 @@ int main(void)
         CUDA_ERRCHK(cudaDeviceSynchronize());
         timer.reset();
         // Perform the vanilla_transpose operation
-        // vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, N);
-        vanilla_transpose<<<2, 2>>>(cuda_A, cuda_B, N);
+        // vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_B, N);
+        // vanilla_transpose<<<1, 2>>>(cuda_A, cuda_B, N);
         CUDA_ERRCHK(cudaDeviceSynchronize());
         float elapsed_time = timer.get();
         if (i > 0) // during first run GPU has to warm up
         {
             log_vanilla_time.push_back(elapsed_time);
+        }
+
+        // stride_optimal_attempt_transpose
+        CUDA_ERRCHK(cudaDeviceSynchronize());
+        timer.reset();
+        // Perform the vanilla_transpose operation
+        // vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_C, N);
+        // stride_optimal_attempt_transpose<<<2, 2>>>(cuda_A, cuda_C, N);
+        CUDA_ERRCHK(cudaDeviceSynchronize());
+        float elapsed_time3 = timer.get();
+        if (i > 0) // during first run GPU has to warm up
+        {
+            log_stride_optimal_attempt_time.push_back(elapsed_time3);
         }
 
         // in_place_transpose
@@ -161,14 +192,17 @@ int main(void)
     }
 
     // define averages
-    float log_vanilla_time_av = std::accumulate(log_vanilla_time.begin(), log_vanilla_time.end(), 0.0 / log_vanilla_time.size());
+    float log_vanilla_time_av = std::accumulate(log_vanilla_time.begin(), log_vanilla_time.end(), 0.0);
     log_vanilla_time_av /= log_vanilla_time.size();
-    float log_in_place_time_av = std::accumulate(log_in_place_time.begin(), log_in_place_time.end(), 0.0 / log_in_place_time.size());
+    float log_stride_optimal_attempt_time_av = std::accumulate(log_stride_optimal_attempt_time.begin(), log_stride_optimal_attempt_time.end(), 0.0);
+    log_stride_optimal_attempt_time_av /= log_stride_optimal_attempt_time.size();
+    float log_in_place_time_av = std::accumulate(log_in_place_time.begin(), log_in_place_time.end(), 0.0);
     log_in_place_time_av /= log_in_place_time.size();
 
     // output averages
-    std::cout << log_vanilla_time_av << " " << (2 * N * N * sizeof(double)) / log_vanilla_time_av * 1e-9 << " GB/sec" << std::endl;
-    std::cout << log_in_place_time_av << " " << (2 * N * N * sizeof(double)) / log_in_place_time_av * 1e-9 << " GB/sec" << std::endl;
+    std::cout << log_vanilla_time_av << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " GB/sec" << std::endl;
+    std::cout << log_stride_optimal_attempt_time_av << " " << ((2 * N * N - N) * sizeof(double)) / log_stride_optimal_attempt_time_av * 1e-9 << " GB/sec" << std::endl;
+    // std::cout << log_in_place_time_av << " " << (2 * N * N * sizeof(double)) / log_in_place_time_av * 1e-9 << " GB/sec" << std::endl;
     std::cout << std::endl;
 
     // copy data back (implicit synchronization point)
@@ -177,6 +211,8 @@ int main(void)
     CUDA_ERRCHK(cudaMemcpy(C, cuda_C, N * N * sizeof(double), cudaMemcpyDeviceToHost));
 
     print_A(A, N);
+    // print_A(B, N);
+    // print_A(C, N);
 
     // missing free-statements ==> 800 bytes leak(N*N*sizeof(double)=10*10*8)
     free(A);

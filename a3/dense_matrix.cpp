@@ -126,19 +126,20 @@ __global__ void complicated_in_place_attempt_transpose(double *A, int N) // FAUL
 }
 
 // inspired by https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/
-__global__ void read_optimal_transpose(double *A, double *B, int TILE_DIM, int BLOCK_ROWS)
+__global__ void read_optimal_transpose(const double *A, double *B, int TILE_DIM, int BLOCK_ROWS)
 {
     int id_x = blockIdx.x * TILE_DIM + threadIdx.x;
     int id_y = blockIdx.y * TILE_DIM + threadIdx.y;
     int width = gridDim.x * TILE_DIM; //#blocks*tile_dimension = N?
 
-    printf("[%d,%d], width: %d, blockidx: %d, th_idx: %d, gridDim.x: %d, TILE_dim: %d, \n", id_x, id_y, width, blockIdx.x, threadIdx.x, gridDim.x, TILE_DIM);
-
     for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
     {
         int from = (id_y + j) * width + id_x;
         int to = id_x * width + (id_y + j);
-        // printf("[%d,%d]  \n", (id_y + j), id_x);
+        if (threadIdx.x == 0 && threadIdx.y == 0)
+        {
+            printf("[%d,%d], blockidx: %d, blockidy: %d, val: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, A[from]);
+        }
         if (to != from) // diagonal is constant
         {
             B[to] = A[from];
@@ -296,7 +297,7 @@ int main(void)
             N=32;
             CUDA_ERRCHK(cudaDeviceSynchronize());
             dim3 block(32, 8); // 32 threads per blocks in x-dimension, 8 threads per blocks in y-dimension
-            dim3 grid((N / 32), (N / 8));
+            dim3 grid((N / 32), (N / 32));
             timer.reset();
             read_optimal_transpose<<<grid,block>>>(cuda_A, cuda_B, 32, 8);
             CUDA_ERRCHK(cudaDeviceSynchronize());

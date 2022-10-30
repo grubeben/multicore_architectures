@@ -138,7 +138,7 @@ __global__ void read_optimal_transpose(const double *A, double *B, int TILE_DIM,
         int to = id_x * width + (id_y + j);
         if (threadIdx.x == 0 && threadIdx.y == 0)
         {
-            //printf("[%d,%d], blockidx: %d, blockidy: %d, val: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, A[from]);
+            // printf("[%d,%d], blockidx: %d, blockidy: %d, val: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, A[from]);
         }
         if (to != from) // diagonal is constant
         {
@@ -175,7 +175,7 @@ __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM,
 }
 
 // c) inspired by https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/
-// this only works for multiples of N=16 starting with N=32
+// this only works for multiples of N=16
 __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, int BLOCK_ROWS)
 {
     __shared__ double tile_1[16][16 + 1];
@@ -188,7 +188,7 @@ __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, i
     int from = (id_y)*width + id_x;
     int to = id_x * width + (id_y);
 
-    if (blockIdx.x >= blockIdx.y) //non diagonal blocks
+    if (blockIdx.x >= blockIdx.y) // non diagonal blocks
     {
         if (from != to)
         {
@@ -201,12 +201,12 @@ __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, i
         }
     }
 
-    if (blockIdx.x == blockIdx.y) //blocks that hold diagonal entries
+    if (blockIdx.x == blockIdx.y) // blocks that hold diagonal entries
     {
         if (from != to)
         {
             tile_1[threadIdx.x][threadIdx.y] = A[from]; // load transposed into shared memory
-            A[to] = tile_1[threadIdx.y][threadIdx.x]; // replace tiles
+            A[to] = tile_1[threadIdx.y][threadIdx.x];   // replace tiles
         }
     }
 }
@@ -234,32 +234,36 @@ float build_av(std::vector<float> log_vec)
 int main(void)
 {
     // outer loop over vector lengths
-    // for (int N = 32; N < 256; N*=2) // benchmarking
-    for (int N = 32; N < 33; N += 2) // test
+    for (int N = 32; N < 4096 + 1; N *= 2) // benchmarking
+    // for (int N = 16; N < 17; N += 2) // test
     {
 
-        double *A, *cuda_A, *B, *cuda_B, *C, *cuda_C;
+        double *A, *cuda_A, *A2, *cuda_A2, *B, *cuda_B, *C, *cuda_C;
         Timer timer;
 
         // Allocate host memory and initialize
         A = (double *)malloc(N * N * sizeof(double));
+        A2 = (double *)malloc(N * N * sizeof(double));
         B = (double *)malloc(N * N * sizeof(double));
         C = (double *)malloc(N * N * sizeof(double));
 
         for (int i = 0; i < N * N; i++)
         {
             A[i] = i;
+            A2[i] = i;
             B[i] = i;
             C[i] = i;
         }
 
         // Allocate device memory and copy host data over
         CUDA_ERRCHK(cudaMalloc(&cuda_A, N * N * sizeof(double)));
+        CUDA_ERRCHK(cudaMalloc(&cuda_A2, N * N * sizeof(double)));
         CUDA_ERRCHK(cudaMalloc(&cuda_B, N * N * sizeof(double)));
         CUDA_ERRCHK(cudaMalloc(&cuda_C, N * N * sizeof(double)));
 
         // copy data over
         CUDA_ERRCHK(cudaMemcpy(cuda_A, A, N * N * sizeof(double), cudaMemcpyHostToDevice));
+        CUDA_ERRCHK(cudaMemcpy(cuda_A2, A2, N * N * sizeof(double), cudaMemcpyHostToDevice));
         CUDA_ERRCHK(cudaMemcpy(cuda_B, B, N * N * sizeof(double), cudaMemcpyHostToDevice));
         CUDA_ERRCHK(cudaMemcpy(cuda_C, C, N * N * sizeof(double), cudaMemcpyHostToDevice));
 
@@ -270,7 +274,7 @@ int main(void)
         std::vector<float> log_read_write_optimal_time;
         std::vector<float> log_in_place_time;
 
-        print_A(A, N);
+        // print_A(A, N);
 
         // do operation a number of times to correct for singular effects
         for (int i = 0; i < 11; i++)
@@ -280,8 +284,7 @@ int main(void)
             CUDA_ERRCHK(cudaDeviceSynchronize());
             timer.reset();
             // Perform the vanilla_transpose operation
-            // vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_B, N);
-            // vanilla_transpose<<<1, 2>>>(cuda_A, cuda_B, N);
+            vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_B, N);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -292,7 +295,7 @@ int main(void)
             // stride_optimal_attempt_transpose
             CUDA_ERRCHK(cudaDeviceSynchronize());
             timer.reset();
-            // Perform the vanilla_transpose operation
+            // Perform stride_optimal_attempt operation
             // stride_optimal_attempt_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_C, N);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time3 = timer.get();
@@ -306,7 +309,7 @@ int main(void)
             dim3 block(32, 8); // 32 threads per blocks in x-dimension, 8 threads per blocks in y-dimension
             dim3 grid((N / 32), (N / 32));
             timer.reset();
-            read_write_optimal_transpose<<<grid,block>>>(cuda_A, cuda_B, 32, 8);
+            read_write_optimal_transpose<<<grid, block>>>(cuda_A, cuda_B, 32, 8);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time5 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -318,8 +321,7 @@ int main(void)
             CUDA_ERRCHK(cudaDeviceSynchronize());
             timer.reset();
             // Perform the vanilla_transpose operation
-            // vanilla_transpose<<<(N + 255) / 256, 256>>>(cuda_A, cuda_B, N);
-            // vanilla_transpose_in_place<<<1, 2>>>(cuda_A, N);
+            vanilla_transpose_in_place<<<(N + 255) / 256, 256>>>(cuda_A, N);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time4 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -332,7 +334,7 @@ int main(void)
             timer.reset();
             dim3 block2(16, 16); // 16 threads per block in x-dimension, 16 threads per blocks in y-dimension
             dim3 grid2(N / 16, N / 16);
-            read_write_optimal_in_place_transpose<<<grid2,block2>>>(cuda_A, 16,16);
+            read_write_optimal_in_place_transpose<<<grid2, block2>>>(cuda_A2, 16, 16);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time6 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -348,25 +350,32 @@ int main(void)
         float log_in_place_time_av = build_av(log_in_place_time);
         float log_read_write_optimal_time_av = build_av(log_read_write_optimal_time);
 
-        // output averages
-        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_in_place_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_stride_optimal_attempt_time_av * 1e-9 << " " << ((2 * N * N -N)* sizeof(double)) / log_read_write_optimal_time_av * 1e-9 <<" " << ((2 * N * N -N)* sizeof(double)) / log_in_place_time_av * 1e-9 << std::endl;
-        // std::cout << log_in_place_time_av << " " << (2 * N * N * sizeof(double)) / log_in_place_time_av * 1e-9 << " GB/sec" << std::endl;
+        // output time averages
+        std::cout << N << " " << log_vanilla_time_av << " " << log_vanilla_in_place_time_av << " " << log_read_write_optimal_time_av << " " << log_in_place_time_av << std::endl;
+
+        // output bandwidth averages
+        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (2 * log_vanilla_in_place_time_av) * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (2 * log_in_place_time_av) * 1e-9 << std::endl;
         std::cout << std::endl;
 
         // copy data back (implicit synchronization point)
         CUDA_ERRCHK(cudaMemcpy(A, cuda_A, N * N * sizeof(double), cudaMemcpyDeviceToHost));
+        CUDA_ERRCHK(cudaMemcpy(A2, cuda_A2, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(B, cuda_B, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(C, cuda_C, N * N * sizeof(double), cudaMemcpyDeviceToHost));
-
-        print_A(A, N);
-        print_A(B, N);
-        // print_A(C, N);
+        /*
+                print_A(B, N);
+                print_A(C, N);
+                print_A(A, N);
+                print_A(A2, N);
+        */
 
         // missing free-statements ==> 800 bytes leak(N*N*sizeof(double)=10*10*8)
         free(A);
+        free(A2);
         free(B);
         free(C);
         CUDA_ERRCHK(cudaFree(cuda_A));
+        CUDA_ERRCHK(cudaFree(cuda_A2));
         CUDA_ERRCHK(cudaFree(cuda_B));
         CUDA_ERRCHK(cudaFree(cuda_C));
 

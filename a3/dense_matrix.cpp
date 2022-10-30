@@ -188,7 +188,7 @@ __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, i
     int from = (id_y)*width + id_x;
     int to = id_x * width + (id_y);
 
-    if (blockIdx.x >= blockIdx.y)
+    if (blockIdx.x >= blockIdx.y) //non diagonal blocks
     {
         if (from != to)
         {
@@ -200,8 +200,8 @@ __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, i
             A[from] = tile_2[threadIdx.y][threadIdx.x];
         }
     }
-    
-    if (blockIdx.x == blockIdx.y)
+
+    if (blockIdx.x == blockIdx.y) //blocks that hold diagonal entries
     {
         if (from != to)
         {

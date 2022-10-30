@@ -138,7 +138,7 @@ __global__ void read_optimal_transpose(const double *A, double *B, int TILE_DIM,
         int to = id_x * width + (id_y + j);
         if (threadIdx.x == 0 && threadIdx.y == 0)
         {
-            printf("[%d,%d], blockidx: %d, blockidy: %d, val: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, A[from]);
+            //printf("[%d,%d], blockidx: %d, blockidy: %d, val: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, A[from]);
         }
         if (to != from) // diagonal is constant
         {
@@ -185,20 +185,28 @@ __global__ void read_write_optimal_in_place_transpose(double *A, int TILE_DIM, i
     int id_y = blockIdx.y * TILE_DIM + threadIdx.y;
     int width = gridDim.x * TILE_DIM; // #blocks*tile_dimension = N?
 
+    int from = (id_y)*width + id_x;
+    int to = id_x * width + (id_y);
+
     if (blockIdx.x >= blockIdx.y)
     {
-        int from = (id_y)*width + id_x;
-        int to = id_x * width + (id_y);
-
         if (from != to)
         {
-
             tile_1[threadIdx.y][threadIdx.x] = A[from]; // load transposed into shared memory
             tile_2[threadIdx.y][threadIdx.x] = A[to];   // load transposed of "to be replaced tile" into shared memory
                                                         // the second read is NOT coalesced
 
-            A[to] = tile_1[threadIdx.x][threadIdx.y]; // replace both tiles
-            A[from] = tile_2[threadIdx.x][threadIdx.y];
+            A[to] = tile_1[threadIdx.y][threadIdx.x]; // replace both tiles
+            A[from] = tile_2[threadIdx.y][threadIdx.x];
+        }
+    }
+    
+    if (blockIdx.x == blockIdx.y)
+    {
+        if (from != to)
+        {
+            tile_1[threadIdx.x][threadIdx.y] = A[from]; // load transposed into shared memory
+            A[to] = tile_1[threadIdx.y][threadIdx.x]; // replace tiles
         }
     }
 }
@@ -294,12 +302,11 @@ int main(void)
             }
 
             // read_write_optimal_transpose
-            N=32;
             CUDA_ERRCHK(cudaDeviceSynchronize());
             dim3 block(32, 8); // 32 threads per blocks in x-dimension, 8 threads per blocks in y-dimension
             dim3 grid((N / 32), (N / 32));
             timer.reset();
-            read_optimal_transpose<<<grid,block>>>(cuda_A, cuda_B, 32, 8);
+            read_write_optimal_transpose<<<grid,block>>>(cuda_A, cuda_B, 32, 8);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time5 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -323,9 +330,9 @@ int main(void)
             // read_write_optimal_in_place_transpose
             CUDA_ERRCHK(cudaDeviceSynchronize());
             timer.reset();
-            dim3 block2(16, 16); // 16 threads per blocks in x-dimension, 16 threads per blocks in y-dimension
-            dim3 grid2(N / 16 + 1, N / 16 + 1);
-            // read_write_optimal_in_place_transpose<<<grid2,block2>>>(cuda_A, 16,16);
+            dim3 block2(16, 16); // 16 threads per block in x-dimension, 16 threads per blocks in y-dimension
+            dim3 grid2(N / 16, N / 16);
+            read_write_optimal_in_place_transpose<<<grid2,block2>>>(cuda_A, 16,16);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time6 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -342,7 +349,7 @@ int main(void)
         float log_read_write_optimal_time_av = build_av(log_read_write_optimal_time);
 
         // output averages
-        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_in_place_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_stride_optimal_attempt_time_av * 1e-9 << " " << (2 * N * N * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << std::endl;
+        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_in_place_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_stride_optimal_attempt_time_av * 1e-9 << " " << ((2 * N * N -N)* sizeof(double)) / log_read_write_optimal_time_av * 1e-9 <<" " << ((2 * N * N -N)* sizeof(double)) / log_in_place_time_av * 1e-9 << std::endl;
         // std::cout << log_in_place_time_av << " " << (2 * N * N * sizeof(double)) / log_in_place_time_av * 1e-9 << " GB/sec" << std::endl;
         std::cout << std::endl;
 
@@ -351,7 +358,7 @@ int main(void)
         CUDA_ERRCHK(cudaMemcpy(B, cuda_B, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(C, cuda_C, N * N * sizeof(double), cudaMemcpyDeviceToHost));
 
-        // print_A(A, N);
+        print_A(A, N);
         print_A(B, N);
         // print_A(C, N);
 

@@ -148,6 +148,7 @@ __global__ void read_optimal_transpose(const double *A, double *B, int TILE_DIM,
 }
 
 // inspired by https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/
+// this only works for multiples of N=16 starting from N=32
 __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM, int BLOCK_ROWS)
 {
     __shared__ double tile[32][32 + 1]; // introduce shared mem for sub matrix (tile) incl- padding
@@ -162,7 +163,7 @@ __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM,
         tile[threadIdx.y + j][threadIdx.x] = A[from]; // load transposed into shared memory
         if (threadIdx.x == 0 && threadIdx.y == 0)
         {
-            printf("[%d,%d], blockidx: %d, blockidy: %d, grid x-y: %d %d, width: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, gridDim.x, gridDim.y, width);
+            // printf("[%d,%d], blockidx: %d, blockidy: %d, grid x-y: %d %d, width: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, gridDim.x, gridDim.y, width);
         }
     }
     __syncthreads();
@@ -171,20 +172,21 @@ __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM,
     id_x = blockIdx.x * TILE_DIM + threadIdx.x;
     id_y = blockIdx.y * TILE_DIM + threadIdx.y;
 
-    if (blockIdx.x == blockIdx.y){
+    if (blockIdx.x == blockIdx.y)
+    {
         for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
         {
             int to = (id_y + j) * width + id_x;
             B[to] = tile[threadIdx.x][threadIdx.y + j]; // write column of shared memory into output matrix
         }
     }
-    else{
+    else
+    {
         for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
         {
             int to = (id_y + j) + width * id_x;
             B[to] = tile[threadIdx.y + j][threadIdx.x]; // write column of shared memory into output matrix
         }
-
     }
 }
 
@@ -248,8 +250,8 @@ float build_av(std::vector<float> log_vec)
 int main(void)
 {
     // outer loop over vector lengths
-    //for (int N = 16; N < 4096 + 1; N *= 2) // benchmarking
-    for (int N = 64; N < 65; N += 2) // test
+    for (int N = 32; N < 4096 + 1; N *= 2) // benchmarking
+    // for (int N = 32; N < 33; N += 2) // test
     {
 
         double *A, *cuda_A, *A2, *cuda_A2, *B, *cuda_B, *C, *cuda_C;
@@ -365,23 +367,22 @@ int main(void)
         float log_read_write_optimal_time_av = build_av(log_read_write_optimal_time);
 
         // output time averages
-        //std::cout << N << " " << log_vanilla_time_av << " " << log_vanilla_in_place_time_av << " " << log_read_write_optimal_time_av << " " << log_in_place_time_av << std::endl;
+        // std::cout << N << " " << log_vanilla_time_av << " " << log_vanilla_in_place_time_av << " " << log_read_write_optimal_time_av << " " << log_in_place_time_av << std::endl;
 
         // output bandwidth averages
-        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_vanilla_in_place_time_av) * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_in_place_time_av) * 1e-9 << std::endl;
-        //std::cout << std::endl;
+        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_vanilla_in_place_time_av)*1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_in_place_time_av)*1e-9 << std::endl;
+        // std::cout << std::endl;
 
         // copy data back (implicit synchronization point)
         CUDA_ERRCHK(cudaMemcpy(A, cuda_A, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(A2, cuda_A2, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(B, cuda_B, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(C, cuda_C, N * N * sizeof(double), cudaMemcpyDeviceToHost));
-        
-        //print_A(B, N);
-        print_A(C, N);
-        //print_A(A, N);
-        //print_A(A2, N);
-        
+
+        // print_A(B, N);
+        // print_A(C, N);
+        // print_A(A, N);
+        // print_A(A2, N);
 
         // missing free-statements ==> 800 bytes leak(N*N*sizeof(double)=10*10*8)
         free(A);

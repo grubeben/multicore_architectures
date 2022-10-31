@@ -160,6 +160,10 @@ __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM,
     {
         int from = (id_y + j) * width + id_x;
         tile[threadIdx.y + j][threadIdx.x] = A[from]; // load transposed into shared memory
+        if (threadIdx.x == 0 && threadIdx.y == 0)
+        {
+            printf("[%d,%d], blockidx: %d, blockidy: %d, grid x-y: %d %d, width: %d \n", id_x, id_y+j, blockIdx.x, blockIdx.y, gridDim.x, gridDim.y, width);
+        }
     }
     __syncthreads();
 
@@ -167,10 +171,20 @@ __global__ void read_write_optimal_transpose(double *A, double *B, int TILE_DIM,
     id_x = blockIdx.x * TILE_DIM + threadIdx.x;
     id_y = blockIdx.y * TILE_DIM + threadIdx.y;
 
-    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
-    {
-        int to = (id_y + j) * width + id_x;
-        B[to] = tile[threadIdx.x][threadIdx.y + j]; // write column of shared memory into output matrix
+    if (blockIdx.x == blockIdx.y){
+        for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        {
+            int to = (id_y + j) * width + id_x;
+            B[to] = tile[threadIdx.x][threadIdx.y + j]; // write column of shared memory into output matrix
+        }
+    }
+    else{
+        for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        {
+            int to = (id_y + j) + width * id_x;
+            B[to] = tile[threadIdx.y + j][threadIdx.x]; // write column of shared memory into output matrix
+        }
+
     }
 }
 
@@ -234,8 +248,8 @@ float build_av(std::vector<float> log_vec)
 int main(void)
 {
     // outer loop over vector lengths
-    for (int N = 32; N < 4096 + 1; N *= 2) // benchmarking
-    // for (int N = 16; N < 17; N += 2) // test
+    //for (int N = 16; N < 4096 + 1; N *= 2) // benchmarking
+    for (int N = 64; N < 65; N += 2) // test
     {
 
         double *A, *cuda_A, *A2, *cuda_A2, *B, *cuda_B, *C, *cuda_C;
@@ -309,7 +323,7 @@ int main(void)
             dim3 block(32, 8); // 32 threads per blocks in x-dimension, 8 threads per blocks in y-dimension
             dim3 grid((N / 32), (N / 32));
             timer.reset();
-            read_write_optimal_transpose<<<grid, block>>>(cuda_A, cuda_B, 32, 8);
+            read_write_optimal_transpose<<<grid, block>>>(cuda_A, cuda_C, 32, 8);
             CUDA_ERRCHK(cudaDeviceSynchronize());
             float elapsed_time5 = timer.get();
             if (i > 0) // during first run GPU has to warm up
@@ -351,23 +365,23 @@ int main(void)
         float log_read_write_optimal_time_av = build_av(log_read_write_optimal_time);
 
         // output time averages
-        std::cout << N << " " << log_vanilla_time_av << " " << log_vanilla_in_place_time_av << " " << log_read_write_optimal_time_av << " " << log_in_place_time_av << std::endl;
+        //std::cout << N << " " << log_vanilla_time_av << " " << log_vanilla_in_place_time_av << " " << log_read_write_optimal_time_av << " " << log_in_place_time_av << std::endl;
 
         // output bandwidth averages
-        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (2 * log_vanilla_in_place_time_av) * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (2 * log_in_place_time_av) * 1e-9 << std::endl;
-        std::cout << std::endl;
+        std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_vanilla_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_vanilla_in_place_time_av) * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_read_write_optimal_time_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / (log_in_place_time_av) * 1e-9 << std::endl;
+        //std::cout << std::endl;
 
         // copy data back (implicit synchronization point)
         CUDA_ERRCHK(cudaMemcpy(A, cuda_A, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(A2, cuda_A2, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(B, cuda_B, N * N * sizeof(double), cudaMemcpyDeviceToHost));
         CUDA_ERRCHK(cudaMemcpy(C, cuda_C, N * N * sizeof(double), cudaMemcpyDeviceToHost));
-        /*
-                print_A(B, N);
-                print_A(C, N);
-                print_A(A, N);
-                print_A(A2, N);
-        */
+        
+        //print_A(B, N);
+        print_A(C, N);
+        //print_A(A, N);
+        //print_A(A2, N);
+        
 
         // missing free-statements ==> 800 bytes leak(N*N*sizeof(double)=10*10*8)
         free(A);

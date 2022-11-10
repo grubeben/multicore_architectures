@@ -200,7 +200,7 @@ int main(void)
                 timer.reset();
                 for (size_t l = 0; l < K; ++l)
                 {
-                    cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + i);
+                    cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + l);
                 }
                 CUDA_ERRCHK(cudaDeviceSynchronize());
                 float elapsed_time_1 = timer.get();

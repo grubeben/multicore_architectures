@@ -1,6 +1,5 @@
 {
     "files.associations": {
-        "memory_access_a": "cpp",
         "array": "cpp",
         "atomic": "cpp",
         "bit": "cpp",

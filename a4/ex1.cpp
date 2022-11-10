@@ -44,7 +44,7 @@ __global__ void shared_mem(int N, double *x, double *results)
   double thread_sum = 0;
   double absolute_thread_sum = 0;
   double thread_2norm = 0;
-  double _thread_zeros = 0;
+  double thread_zeros = 0;
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
   {
     // access x[i] 4x? RTX3060 has a cache for every SM, does that help here?
@@ -139,12 +139,12 @@ int main(void)
   // for (int N = 32; N < 33; N += 2) // test
   {
 
-    double *x, *cuda_x, *results, *cuda_results, alpha, cuda_alpha;
+    double *x, *cuda_x, *results, *cuda_results, alpha, *cuda_alpha;
 
     // Allocate host memory and initialize
     x = (double *)malloc(N * sizeof(double));
     results = (double *)malloc(4 * sizeof(double));
-    double alpha = 0;
+    alpha = 0;
 
     std::fill(x, x + N, 1);
     std::fill(results, results + 4, 0);
@@ -195,23 +195,23 @@ int main(void)
       // warp shuffle only inmplementation (with fixed number of threads)
       CUDA_ERRCHK(cudaDeviceSynchronize());
       timer.reset();
-      warp_shuffle<<<256, 256>>>(N, cuda_x, cuda_result);
+      warp_shuffle<<<256, 256>>>(N, cuda_x, cuda_results);
       CUDA_ERRCHK(cudaDeviceSynchronize());
       float elapsed_time_2 = timer.get();
       if (i > 0) // during first run GPU has to warm up
       {
-        log_ws_elastic.push_back(elapsed_time_2);
+        log_ws_fixed.push_back(elapsed_time_2);
       }
 
       // warp shuffle only inmplementation (with number of threads as function of N)
       CUDA_ERRCHK(cudaDeviceSynchronize());
       timer.reset();
-      warp_shuffle<<<grid, block>>>(cuda_x, cuda_result);
+      warp_shuffle<<<(N + 256) / 256, 256>>>(N, cuda_x, cuda_results);
       CUDA_ERRCHK(cudaDeviceSynchronize());
       float elapsed_time_3 = timer.get();
       if (i > 0) // during first run GPU has to warm up
       {
-        log_read_write_optimal_time.push_back(elapsed_time_3);
+        log_ws_elastic.push_back(elapsed_time_3);
       }
     }
 
@@ -219,10 +219,10 @@ int main(void)
     float log_shared_mem_av = build_av(log_shared_mem);
     float log_ws_fixed_av = build_av(log_ws_fixed);
     float log_ws_elastic_av = build_av(log_ws_elastic);
-    float log_dot_prodct_av = build_av(log_dot_product);
+    float log_dot_product_av = build_av(log_dot_product);
 
     // output time averages
-    std::cout << N << " " << log_dot_product_av " " << log_shared_mem_av << " " << log_ws_fixed_av << " " << log_ws_elastic_av << std::endl;
+    std::cout << N << " " << log_dot_product_av << " " << log_shared_mem_av << " " << log_ws_fixed_av << " " << log_ws_elastic_av << std::endl;
 
     // output bandwidth averages
     // std::cout << N << " " << ((2 * N * N - N) * sizeof(double)) / log_dot_product_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_shared_mem_av * 1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_ws_fixed_av*1e-9 << " " << ((2 * N * N - N) * sizeof(double)) / log_ws_elastic_av * 1e-9 << std::endl;
@@ -235,7 +235,6 @@ int main(void)
 
     free(x);
     free(results);
-    free(alpha);
     CUDA_ERRCHK(cudaFree(cuda_x));
     CUDA_ERRCHK(cudaFree(cuda_results));
     CUDA_ERRCHK(cudaFree(cuda_alpha));

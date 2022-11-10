@@ -1,4 +1,7 @@
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <stdio.h>
+#include <cmath>
 #include <stdlib.h>
 #include <iostream>
 #include <vector>
@@ -7,7 +10,17 @@
 #include "timer.hpp"
 #include "cuda_errchk.hpp" // for error checking of CUDA calls
 
-// dot product as performance reference
+
+
+// dot-product <x,ki> for i= 0..7
+__global__ void k8_dot_product(int N, double *x, double **y, double *results)
+{
+    
+
+}
+
+
+//reference dot-product
 __global__ void cuda_dot_product(int N, double *x, double *y, double *alpha)
 {
   __shared__ double shared_mem[512];
@@ -30,98 +43,6 @@ __global__ void cuda_dot_product(int N, double *x, double *y, double *alpha)
 
   if (threadIdx.x == 0)
     atomicAdd(alpha, shared_mem[0]);
-}
-
-// a) shared_memory kernel computing simple_sum, norm1, norm2 and number_zeros
-__global__ void shared_mem(int N, double *x, double *results)
-{
-  __shared__ double shared_mem_ss[256];    // shared memory simple sum
-  __shared__ double shared_mem_as[256];    // shared memory absolute sum
-  __shared__ double shared_mem_2norm[256]; // shared memory 2nrom
-  __shared__ double shared_mem_zeros[256]; // shared memory zeros
-
-  // cover for N> total_threads
-  double thread_sum = 0;
-  double absolute_thread_sum = 0;
-  double thread_2norm = 0;
-  double thread_zeros = 0;
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
-  {
-    // access x[i] 4x? RTX3060 has a cache for every SM, does that help here?
-    thread_sum += x[i];
-    absolute_thread_sum += abs(x[i]);
-    thread_2norm += pow(x[i], 2);
-    if (x[i] == 0)
-    {
-      thread_zeros += 1;
-    }
-  }
-
-  shared_mem_ss[threadIdx.x] = thread_sum;
-  shared_mem_as[threadIdx.x] = absolute_thread_sum;
-  shared_mem_2norm[threadIdx.x] = thread_2norm;
-  shared_mem_zeros[threadIdx.x] = thread_zeros;
-  for (int k = blockDim.x / 2; k > 0; k /= 2)
-  {
-    __syncthreads();
-    if (threadIdx.x < k)
-    {
-      shared_mem_ss[threadIdx.x] += shared_mem_ss[threadIdx.x + k];
-      shared_mem_as[threadIdx.x] += shared_mem_as[threadIdx.x + k];
-      shared_mem_2norm[threadIdx.x] += shared_mem_2norm[threadIdx.x + k];
-      shared_mem_zeros[threadIdx.x] += shared_mem_zeros[threadIdx.x + k];
-    }
-  }
-
-  if (threadIdx.x == 0)
-  {
-    atomicAdd(&results[0], shared_mem_ss[0]); // adds shared_mem[0] to results and returns results[0]
-    atomicAdd(&results[1], shared_mem_as[0]);
-    atomicAdd(&results[2], shared_mem_2norm[0]); // take root??
-    atomicAdd(&results[3], shared_mem_zeros[0]);
-  }
-}
-
-// b) fixed thread-number warf-shuffle kernel computing simple_sum, norm1, norm2 and number_zeros
-__global__ void warp_shuffle(int N, double *x, double *results)
-{
-  int total_threads = blockDim.x * gridDim.x;
-
-  // declare local variables
-  double thread_sum = 0;
-  double absolute_thread_sum = 0;
-  double thread_2norm = 0;
-  double thread_zeros = 0;
-
-  // cover for N > total_threads
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += total_threads)
-  {
-    thread_sum += x[i];
-    absolute_thread_sum += abs(x[i]);
-    thread_2norm += pow(x[i], 2);
-    if (x[i] == 0)
-    {
-      thread_zeros += 1;
-    }
-  }
-
-  // we now have total_threads - threads that need to be reduced; 32 per warp
-  for (int i = warpSize / 2; i > 0; i = i / 2)
-  {
-    // __shfl_down_sync(all threads take part, loval var, how far too pass down local var);
-    thread_sum += __shfl_down_sync(-1, thread_sum, i);
-    absolute_thread_sum += __shfl_down_sync(-1, absolute_thread_sum, i);
-    thread_2norm += __shfl_down_sync(-1, thread_2norm, i);
-    thread_zeros += __shfl_down_sync(-1, thread_zeros, i);
-  }
-
-  if (threadIdx.x == 0)
-  {
-    atomicAdd(&results[0], thread_sum);
-    atomicAdd(&results[1], absolute_thread_sum);
-    atomicAdd(&results[2], thread_2norm); // take root??
-    atomicAdd(&results[3], thread_zeros);
-  }
 }
 
 // compute averages

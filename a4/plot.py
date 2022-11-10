@@ -41,8 +41,8 @@ plt.plot(N, t_shared_mem,
 plt.plot(N, t_ws_elastix, label="warf-shuffle implementation with #threads(N)",
          color='c', linestyle='dashdot')
 #plt.plot(k, data , label = "time")
-#plt.xscale('log', base=10)
-#plt.yscale('log', base=2)
+plt.xscale('log', base=10)
+plt.yscale('log', base=10)
 plt.xlabel("vector length N")
 plt.ylabel("computation time [s]")
 plt.legend()

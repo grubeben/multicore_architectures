@@ -135,7 +135,7 @@ float build_av(std::vector<float> log_vec)
 int main(void)
 {
   // outer loop over vector lengths
-  for (int N = 10; N < 10^8; N *= 10) // benchmarking
+  for (int N = 10; N < 10 ^ 8; N *= 10) // benchmarking
   // for (int N = 32; N < 33; N += 2) // test
   {
 

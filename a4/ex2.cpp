@@ -7,12 +7,11 @@
 #include <cmath>
 #include <iostream>
 #include <stdlib.h>
-#include <iostream>
 #include <vector>
 #include <numeric>
 
 // a) implements 8 dot-product operations in one
-__global__ void cuda_mdot_product(int N, double *x, double *y, double *results)
+__global__ void cuda_8dot_product(int N, double *x, double *y, double *results)
 {
     __shared__ double shared_mem1[256]; // remember to only use 256 threads per block then!
     __shared__ double shared_mem2[256];
@@ -83,7 +82,7 @@ void multiple_batches(int N, int K, double *x, double **y, double **results)
     int h = K / 8;
     for (; h > 0; h--)
     {
-        cuda_mdot_product<<<256, 256>>>(N, x, y[h - 1], results[h - 1]);
+        cuda_8dot_product<<<256, 256>>>(N, x, y[h - 1], results[h - 1]);
     }
 }
 
@@ -97,29 +96,29 @@ float build_av(std::vector<float> log_vec)
 
 int main(void)
 {
-    // Initialize CUBLAS:
-    cublasHandle_t h;
-    cublasCreate(&h);
-
     // outer loop over vector lengths
     for (int N = 1000; N < 1000001; N *= 10)
     {
         // inner loop over number of dot-products
         for (size_t K = 8; K < 33; K += 8)
         {
+            // Initialize CUBLAS:
+            cublasHandle_t h;
+            cublasCreate(&h);
+            
             // allocate host memory:
             double *x = (double *)malloc(sizeof(double) * N);
             double *results = (double *)malloc(sizeof(double) * K);
             double *results_cublas = (double *)malloc(sizeof(double) * K);
-            double **v = (double **)malloc(sizeof(double *) * K / 8);
-            for (size_t i = 0; i < K / 8; ++i)
-            {
-                v[i] = (double *)malloc(sizeof(double) * N * 8);
-            }
             double **results3 = (double **)malloc(sizeof(double) * K / 8);
             for (size_t i = 0; i < K / 8; ++i)
             {
                 results3[i] = (double *)malloc(sizeof(double) * 8);
+            }
+            double **v = (double **)malloc(sizeof(double *) * K / 8);
+            for (size_t i = 0; i < K / 8; ++i)
+            {
+                v[i] = (double *)malloc(sizeof(double) * N * 8);
             }
             double **cublas_v = (double **)malloc(sizeof(double *) * K);
             for (size_t i = 0; i < K; ++i)
@@ -200,7 +199,7 @@ int main(void)
                 timer.reset();
                 for (size_t l = 0; l < K; ++l)
                 {
-                    cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + l);
+                    //cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + l);
                 }
                 CUDA_ERRCHK(cudaDeviceSynchronize());
                 float elapsed_time_1 = timer.get();
@@ -260,8 +259,9 @@ int main(void)
             cudaFree(cuda_v);
             cudaFree(cuda_results3);
             cudaFree(cuda_cublas_v);
+
+            cublasDestroy(h);
         }
     }
-    cublasDestroy(h);
     return EXIT_SUCCESS;
 }

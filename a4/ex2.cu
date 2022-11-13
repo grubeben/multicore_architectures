@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <numeric>
-
+/*
 // a) implements 8 dot-product operations in one
 __global__ void cuda_8dot_product(int N, double *x, double *y, double *results)
 {
@@ -85,7 +85,7 @@ void multiple_batches(int N, int K, double *x, double **y, double **results)
         cuda_8dot_product<<<256, 256>>>(N, x, y[h - 1], results[h - 1]);
     }
 }
-
+*/
 // compute averages
 float build_av(std::vector<float> log_vec)
 {
@@ -186,7 +186,7 @@ int main(void)
                 // custom
                 CUDA_ERRCHK(cudaDeviceSynchronize());
                 timer.reset();
-                multiple_batches(N, K, cuda_x, cuda_v, cuda_results3);
+                //multiple_batches(N, K, cuda_x, cuda_v, cuda_results3);
                 CUDA_ERRCHK(cudaDeviceSynchronize());
                 float elapsed_time_0 = timer.get();
                 if (i > 0) // during first run GPU has to warm up
@@ -199,7 +199,7 @@ int main(void)
                 timer.reset();
                 for (size_t l = 0; l < K; ++l)
                 {
-                    //cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + l);
+                    cublasDdot(h, N, cuda_x, 1, cuda_cublas_v[l], 1, results_cublas + l);
                 }
                 CUDA_ERRCHK(cudaDeviceSynchronize());
                 float elapsed_time_1 = timer.get();

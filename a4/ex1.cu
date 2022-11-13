@@ -109,10 +109,10 @@ __global__ void warp_shuffle(int N, double *x, double *results)
   for (int i = warpSize / 2; i > 0; i = i / 2)
   {
     // __shfl_down_sync(all threads take part, loval var, how far too pass down local var);
-    thread_sum += __shfl_down_sync(-1, thread_sum, i);
-    absolute_thread_sum += __shfl_down_sync(-1, absolute_thread_sum, i);
-    thread_2norm += __shfl_down_sync(-1, thread_2norm, i);
-    thread_zeros += __shfl_down_sync(-1, thread_zeros, i);
+    thread_sum += __shfl_down_sync(0xFFFFFFFF, thread_sum, i);
+    absolute_thread_sum += __shfl_down_sync(0xFFFFFFFF, absolute_thread_sum, i);
+    thread_2norm += __shfl_down_sync(0xFFFFFFFF, thread_2norm, i);
+    thread_zeros += __shfl_down_sync(0xFFFFFFFF, thread_zeros, i);
   }
 
   if (threadIdx.x % 32 == 0)

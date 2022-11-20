@@ -87,8 +87,8 @@ void conjugate_gradient(size_t N, // number of unknows
 //, double *init_guess)   // feel free to add a nonzero initial guess as needed
 {
 
-  const int nBlocks = 256;
-  const int nThreads = 256;
+  const int nBlocks = 4096;
+  const int nThreads = 1024;
 
   // clear solution vector (it may contain garbage values):
   std::fill(solution, solution + N, 0);
@@ -153,7 +153,7 @@ void conjugate_gradient(size_t N, // number of unknows
 
     // line 8:
     vecAdd8<<<nBlocks, nThreads>>>(N, r_d, Ap_d, alpha);
-    cudaMemcpy(r, r_d, sizeof(double) * N, cudaMemcpyDeviceToHost);
+    
 
     rr = 0;
     cudaMemcpy(cuda_rr, &rr, sizeof(double), cudaMemcpyHostToDevice);
@@ -166,6 +166,8 @@ void conjugate_gradient(size_t N, // number of unknows
     if (rr < 1e-7)
     {
       cudaMemcpy(solution, solution_d, N * sizeof(double), cudaMemcpyDeviceToHost);
+      //cudaMemcpy(r, r_d, sizeof(double) * N, cudaMemcpyDeviceToHost);
+      //cudaMemcpy(p, p_d, N * sizeof(double), cudaMemcpyDeviceToHost);
       break;
     }
 
@@ -174,7 +176,7 @@ void conjugate_gradient(size_t N, // number of unknows
 
     // line 12:
     vecAdd12<<<nBlocks, nThreads>>>(N, p_d, r_d, beta);
-    cudaMemcpy(p, p_d, N * sizeof(double), cudaMemcpyDeviceToHost);
+    
 
     if (iters > 10000)
       break; // solver didn't converge
@@ -186,6 +188,7 @@ void conjugate_gradient(size_t N, // number of unknows
   else
     std::cout << "Conjugate Gradient converged in " << iters << " iterations." << std::endl;
 */
+
   free(p);
   free(r);
   free(Ap);
@@ -200,7 +203,7 @@ void solve_system(size_t points_per_direction)
 
   size_t N = points_per_direction * points_per_direction; // number of unknows to solve for
 
-  //std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
+ // std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
 
   //
   // Allocate CSR arrays.
@@ -268,9 +271,9 @@ void solve_system(size_t points_per_direction)
 int main()
 {
   Timer timer;
-/*
-  int N_vals[5] = {10,30, 100,300,1000};
-  for (int i = 0; i < 5; i++)
+
+  int N_vals[5] = {3800};
+  for (int i = 0; i < 1; i++)
   {
 
     int N = N_vals[i];
@@ -282,12 +285,14 @@ int main()
 
     printf("%d %f\n", N*N, t);
   }
-*/
+
+/*
     timer.reset();
 
-    solve_system(1600); // solves a system with 100*100 unknowns
+    solve_system(2500); // solves a system with 100*100 unknowns
 
     float t = timer.get();
-    printf("%d %f\n", 1600*1600, t);
+    printf("%d %f\n", 2500*2500, t);
+*/
   return EXIT_SUCCESS;
 }

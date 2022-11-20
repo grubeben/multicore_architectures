@@ -6,65 +6,49 @@ from subprocess import Popen, PIPE
 import subprocess
 # import sys
 
-#does this work
-p = Popen(['csma.py ex1.cu'], shell=True, stdout=PIPE, stdin=PIPE)
-data_ex1 = p.stdout.readline().strip()
-#or this?
-subprocess.call(["python3", "csma.py ex1.cu"], stdout=PIPE)
-
-
 # files
-filepath1 = "data/ex1.txt"
+filepath1 = "data/ex2rtx.txt"
 data_ex1 = np.genfromtxt(filepath1, dtype=float, delimiter=' ')
+filepath2 = "data/ex2rtxo.txt"
+data_ex2 = np.genfromtxt(filepath2, dtype=float, delimiter=' ')
 
 
 # filepath3 = "data/dense_matrix_GB_k40.txt"
 # data_dense= np.genfromtxt(filepath3, dtype=float, delimiter=' ')
 
 
-# # plot1 - dot product
-# N = []
-# t_dot_product = []
-# t_4dot_product = []
-# t_shared_mem = []
-# t_ws_fixed = []
-# t_ws_elastix = []
+# plot1 - dot product
+N = []
+No=[]
+t= []
+to= []
 
-# for i in range(len(data_ex1)):
-#     N.append(data_ex1
-#              [i][0])
-#     t_dot_product.append(data_ex1
-#                          [i][1])
-#     t_shared_mem.append(data_ex1
-#                         [i][2])
-#     t_ws_fixed.append(data_ex1
-#                       [i][3])
-#     t_ws_elastix.append(data_ex1
-#                         [i][4])
-# for i in range(len(t_dot_product)):
-#     t_4dot_product.append(4*t_dot_product[i])
+for i in range(len(data_ex1)):
+    N.append(data_ex1
+             [i][0])
+    t.append(data_ex1
+             [i][1])
+for i in range(len(data_ex2)):
+    No.append(data_ex2
+             [i][0])
+    to.append(data_ex2
+             [i][1])
 
-# plt.figure(figsize=(10, 5))
-# plt.plot(N, t_4dot_product,
-#          label="execution of 4 dot-products as reference", color='y')
-# plt.plot(N, t_dot_product,
-#          label="execution of 1 dot-product as reference", color='y', linestyle='dotted')
-# plt.plot(N, t_ws_fixed,
-#          label="shared-memory implementation", color='g')
-# plt.plot(N, t_shared_mem,
-#          label="warf-shuffle implementation with fixed #threads", color='c')
-# plt.plot(N, t_ws_elastix, label="warf-shuffle implementation with #threads(N)",
-#          color='c', linestyle='dashdot')
-# #plt.plot(k, data , label = "time_custom")
-# plt.xscale('log', base=10)
+plt.figure(figsize=(10, 5))
+plt.plot(No, to,
+         label="optimized code, 4096x1024", color='y', linestyle='dotted')
+plt.plot(N, t,
+         label="unoptimized code, 256x256", color='y')
+#plt.plot(k, data , label = "time_custom")
+plt.xscale('log', base=10)
 # plt.yscale('log', base=10)
-# plt.xlabel("vector length N")
-# plt.ylabel("computation time_custom [s]")
-# plt.legend()
-# plt.title(
-#     "Performance of different norm-computing-kernels on the RTX3060-machine")
-# plt.grid()
-# plt.savefig("plots/ex1.jpg", bbox_inches='tight')
+plt.xlabel("unknowns")
+plt.ylabel("computation time[s]")
+plt.legend()
+plt.title(
+    "Performance of CG-kernels on the RTX3060-machine")
+plt.grid()
+plt.savefig("plots/ex2.jpg", bbox_inches='tight')
 
 
 # filepath2 = "data/ex2.txt"

@@ -21,43 +21,33 @@ __global__ void vectorAddition(double *a, double *b, double *c, int n)
     }
 }
 
-// d) atomicAdd() updates per second
-/*
-__global__ void AtomicAdds(double *result, size_t n)
-{
-    for (size_t i = 0; i < n; i++)
-    {
-        atomicAdd(result, 1.0);
-    }
-}
-*/
-
 // e) Peak floating point rate per vector triad
 __global__ void vectorTriad(double *aa, double *bb, double *cc, int n, int X)
 {
-    double *a = aa;
-    double *b = bb;
-    double *c = cc;
+    double a = aa[blockIdx.x * blockDim.x + threadIdx.x];
+    double b = bb[blockIdx.x * blockDim.x + threadIdx.x];
+    double c = cc[blockIdx.x * blockDim.x + threadIdx.x];
 
     int threadId = blockIdx.x * blockDim.x + threadIdx.x;
     if (threadId < n)
     {
-        for (int i = 0; i < 10 * X; i++)
+        for (int i = 0; i < X; i++)
         {
             // 12 times
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
-            c[threadId] += a[threadId] * b[threadId];
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
+            c += a * b;
         }
+        aa[blockIdx.x * blockDim.x + threadIdx.x] += c;
     }
 }
 
@@ -110,7 +100,7 @@ int main(void)
     std::vector<float> log_b;
     std::vector<float> log_c;
     std::vector<float> log_d;
-    std::vector<float> log_e;
+    std::vector<double> log_e;
 
     // initiate timer
     Timer timer;
@@ -132,7 +122,7 @@ int main(void)
 
         if (i > 0) // during first run GPU has to warm up
         {
-            log_a.push_back((elapsed_time_n_element * Na - elapsed_time_N_element * n) / (1- n));
+            log_a.push_back((elapsed_time_n_element * Na - elapsed_time_N_element * n) / (1 - n));
         }
 
         // b) kernel launch
@@ -158,32 +148,19 @@ int main(void)
 
             log_c.push_back(3 * N * sizeof(double) / (1e9 * elapsed_time_2));
         }
-        /*
-                // d) atomicAdd()/ sec
-                const int number_adds = 100;
-                CUDA_ERRCHK(cudaDeviceSynchronize());
-                timer.reset();
-                AtomicAdds<<<256, 256>>>(cuda_xa, number_adds);
-                CUDA_ERRCHK(cudaDeviceSynchronize());
-                float elapsed_time_3 = timer.get();
-                if (i > 0) // during first run GPU has to warm up
-                {
-                    log_d.push_back(number_adds / elapsed_time_3);
-                }
-        */
     }
-    for (int j=0;j<2;j++)
+    for (int j = 0; j < 4; j++)
     {
         // e) peak floating point rate
-        const int number_triads = 80;
+        const int number_triads = 10000;
         CUDA_ERRCHK(cudaDeviceSynchronize());
         timer.reset();
-        vectorTriad<<<n_blocks, n_threads>>>(cuda_x, cuda_y, cuda_z, N, number_triads);
+        vectorTriad<<<1024, 1024>>>(cuda_x, cuda_y, cuda_z, 1024 * 1024, number_triads);
         CUDA_ERRCHK(cudaDeviceSynchronize());
-        float elapsed_time_4 = timer.get();
+        double elapsed_time_4 = timer.get();
         if (j > 0) // during first run GPU has to warm up
         {
-            float rp_rate = number_triads * 10. * 12 * 2 * N / (1e9*elapsed_time_4);
+            double rp_rate = number_triads * 12 * 2. * 1024 * 1024 / (1e9 * elapsed_time_4);
             log_e.push_back(rp_rate);
         }
     }
@@ -193,20 +170,20 @@ int main(void)
     float log_b_av = build_av(log_b);
     float log_c_av = build_av(log_c);
     float log_d_av = build_av(log_d);
-    //float log_e_av = build_av(log_e);
-    float log_e_av =0;
-    for (size_t m=0; m<(size_t)log_e.size(); m++)
+
+    double log_e_av = 0;
+    for (size_t m = 0; m < (size_t)log_e.size(); m++)
     {
-        log_e_av+=log_e[m];
+        log_e_av += log_e[m];
     }
-    log_e_av/=log_e.size();
+    log_e_av /= 1e3 * log_e.size();
 
     // output
     std::cout << "PCI Express latency:                  " << 1e6 * log_a_av << "    [micro-s]" << std::endl;
     std::cout << "Kernel launch latency:                " << 1e6 * log_b_av << "    [micro-s]" << std::endl;
     std::cout << "Practical peak memory performance:    " << log_c_av << "  [GB/s]" << std::endl;
     std::cout << "Maximum # AtomicAdds():               " << log_d_av << std::endl;
-    std::cout << "Peak floating point rate:             " << log_e_av << "  [GFLOPs/s]" << std::endl;
+    std::cout << "Peak floating point rate:             " << log_e_av << "  [TFLOPs/s]" << std::endl;
 
     free(x);
     free(xa);

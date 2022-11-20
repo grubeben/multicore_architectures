@@ -33,14 +33,14 @@ __global__ void AtomicAdds(double *result, size_t n)
 // e) Peak floating point rate per vector triad
 __global__ void vectorTriad(double *aa, double *bb, double *cc, int n, int X)
 {
-    double* a=aa;
-    double* b=bb;
-    double* c=cc;
+    double *a = aa;
+    double *b = bb;
+    double *c = cc;
 
     int threadId = blockIdx.x * blockDim.x + threadIdx.x;
     if (threadId < n)
     {
-        for (int i = 0; i <X; i++)
+        for (int i = 0; i < X; i++)
         {
             // 12 times
             c[threadId] += a[threadId] * b[threadId];
@@ -129,7 +129,7 @@ int main(void)
 
         if (i > 0) // during first run GPU has to warm up
         {
-            log_a.push_back((elapsed_time_n_element * Na - elapsed_time_N_element * n) / (1- n));
+            log_a.push_back((elapsed_time_n_element * Na - elapsed_time_N_element * n) / (1 - n));
         }
 
         // b) kernel launch
@@ -160,16 +160,16 @@ int main(void)
         const int number_adds = 100;
         CUDA_ERRCHK(cudaDeviceSynchronize());
         timer.reset();
-        AtomicAdds<<<256, 256>>>(cuda_xa, number_adds);
+        AtomicAdds<<<1024,1024>>>(cuda_x, number_adds);
         CUDA_ERRCHK(cudaDeviceSynchronize());
         float elapsed_time_3 = timer.get();
         if (i > 0) // during first run GPU has to warm up
         {
-            log_d.push_back(number_adds / elapsed_time_3);
+            log_d.push_back(1024*1024 * number_adds / elapsed_time_3);
         }
 
         // e) peak floating point rate
-        const int number_triads = 8;
+        const int number_triads = 9;
         CUDA_ERRCHK(cudaDeviceSynchronize());
         timer.reset();
         vectorTriad<<<n_blocks, n_threads>>>(cuda_x, cuda_y, cuda_z, N, number_triads);
@@ -177,7 +177,7 @@ int main(void)
         float elapsed_time_4 = timer.get();
         if (i > 0) // during first run GPU has to warm up
         {
-            float rp_rate = number_triads *12 * 2. * N / (1e9 * elapsed_time_4);
+            float rp_rate = number_triads * 12 * 2. * N / (1e9 * elapsed_time_4);
             log_e.push_back(rp_rate);
         }
     }

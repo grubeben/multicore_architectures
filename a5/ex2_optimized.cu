@@ -24,7 +24,7 @@ __global__ void cuda_csr_matvec_product(size_t N,
 // result = (x, y)
 __global__ void cuda_dot_product(int N, double *x, double *y, double *result)
 {
-  __shared__ double shared_mem[512];
+  __shared__ double shared_mem[1024];
 
   double dot = 0;
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)

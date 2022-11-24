@@ -44,7 +44,8 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // upper neighbor
         if (i > 0) 
         { 
-        col_indices[this_row_offset] = (i-1)* N+j;
+        //col_indices[this_row_offset] = (i-1)* N+j;
+        col_indices[this_row_offset] = (i-1)+N*j;
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -52,7 +53,8 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // left neighbor
         if (j > 0) 
         { 
-        col_indices[this_row_offset] = i* N +(j-1);
+        //col_indices[this_row_offset] = i* N +(j-1);
+        col_indices[this_row_offset] = i+ N *(j-1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -60,7 +62,8 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // lower neighbor
         if (i < N-1) 
         { 
-        col_indices[this_row_offset] = (i+1)* N +j;
+        col_indices[this_row_offset] = (i+1)+N*j;
+        //col_indices[this_row_offset] = (i+1)* N +j;
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -68,6 +71,7 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // right neighbour
         if (j < M-1) 
         { 
+        //col_indices[this_row_offset] = i*N +(j+1);
         col_indices[this_row_offset] = i+ N *(j+1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
@@ -195,8 +199,8 @@ float med(std::vector<float> log_vec)
 int main()
 {
 
-    int N = 3;
-    for (; N < 11; N *= 10)
+    int N = 2;
+    for (; N < 10; N *= 10)
     {
         // Allocation sizes
         int n_values = 5*(N-2)*(N-2)+4*4*(N-2)+4*3; //5*N*N is definitely sufficient, can we go exact? yes
@@ -263,19 +267,19 @@ int main()
         std::cout << "\n";
 
         std::cout << "values:\n";
-        for (int i = 0; i < n_values; ++i)
+        for (int i = 0; i < n_values+1; ++i)
             std::cout << values[i]<< " "<<values_cpu[i] << std::endl;
         std::cout << "\n";
 
         std::cout << "col indeces:\n";
-        for (int i = 0; i < n_values; ++i)
+        for (int i = 0; i < n_values+1; ++i)
             std::cout << col_indices[i]<< " "<<col_indices_cpu[i]  << std::endl;
         std::cout << "\n";
 
         std::cout << "row offsets:\n";
-        for (int i = 0; i < N*N; ++i)
+        for (int i = 0; i < N*N+1; ++i)
             std::cout << row_offsets[i]<< " "<<row_offsets_cpu[i] << std::endl;
-        
+
 
         
 

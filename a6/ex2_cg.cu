@@ -83,7 +83,7 @@ __global__ void count_nnz(int *nn_counts, int N, int M)
     }
 }
 
-_global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int N,int M)
+__global__ void populate_matrix(int *row_offsets,double *values,int *col_indices,int N,int M)
 {
     for (int row = blockDim.x * blockIdx.x + threadIdx.x; row < N*M; row += gridDim.x * blockDim.x) 
     {
@@ -99,7 +99,8 @@ _global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int
         // upper neighbor
         if (i > 0) 
         { 
-        col_indices[this_row_offset] = (i-1) * N + j;
+        //col_indices[this_row_offset] = (i-1)* N+j;
+        col_indices[this_row_offset] = (i-1)+N*j;
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -107,7 +108,8 @@ _global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int
         // left neighbor
         if (j > 0) 
         { 
-        col_indices[this_row_offset] = i * N + j-1;
+        //col_indices[this_row_offset] = i* N +(j-1);
+        col_indices[this_row_offset] = i+ N *(j-1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -115,7 +117,8 @@ _global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int
         // lower neighbor
         if (i < N-1) 
         { 
-        col_indices[this_row_offset] = (i+1) * N + j;
+        col_indices[this_row_offset] = (i+1)+N*j;
+        //col_indices[this_row_offset] = (i+1)* N +j;
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -123,7 +126,8 @@ _global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int
         // right neighbour
         if (j < M-1) 
         { 
-        col_indices[this_row_offset] = i* N + j+1;
+        //col_indices[this_row_offset] = i*N +(j+1);
+        col_indices[this_row_offset] = i+ N *(j+1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -296,7 +300,13 @@ void conjugate_gradient(int NN, // number of unknows
 
         // line 4: A*p:
         cuda_csr_matvec_product<<<512, 512>>>(NN, csr_rowoffsets, csr_colindices, csr_values, cuda_p, cuda_Ap);
-
+        double *Ap = (double *)malloc(sizeof(double) * NN);
+        cudaMemcpy(Ap, cuda_Ap, NN*sizeof(double), cudaMemcpyDeviceToHost);
+        printf("\n\n");
+        for (int p=0;p<NN;p++)
+        {
+            printf("%f\n", Ap[p]);
+        }
         // lines 5,6:
         cudaMemcpy(cuda_scalar, &zero, sizeof(double), cudaMemcpyHostToDevice);
         cuda_dot_product<<<512, 512>>>(NN, cuda_p, cuda_Ap, cuda_scalar);
@@ -336,7 +346,7 @@ void conjugate_gradient(int NN, // number of unknows
     cudaDeviceSynchronize();
     std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
 
-    if (iters > 10000)
+    if (iters > 5)
         std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
                   << std::endl;
     else
@@ -354,19 +364,9 @@ void conjugate_gradient(int NN, // number of unknows
  */
 void solve_system(int N)
 {
-
     int NN = N *N; // number of unknows to solve for
 
     std::cout << "Solving Ax=b with " << NN << " unknowns." << std::endl;
-
-    //
-    // Allocate CSR arrays.
-    //
-    // Note: Usually one does not know the number of nonzeros in the system matrix
-    // a-priori.
-    //       For this exercise, however, we know that there are at most 5 nonzeros
-    //       per row in the system matrix, so we can allocate accordingly.
-    //
 
     // Allocation sizes
     int n_values = 5*(N-2)*(N-2)+4*4*(N-2)+4*3; //5*N*N is definitely sufficient, can we go exact? yes
@@ -374,7 +374,7 @@ void solve_system(int N)
     
     // Allocate host arrays
     int *csr_rowoffsets = (int *)malloc(sizeof(double) * (NN+1)); // N*M nodes ==> N*M rows
-    int *nn_counts = (int *)malloc(sizeof(int) *(NN+1));
+    int *nn_counts = (int *)malloc(sizeof(int) *(NN));
     double *csr_values = (double *)malloc(sizeof(double) *n_values);
     int *csr_colindices = (int *)malloc(sizeof(double) *n_values); 
 
@@ -383,7 +383,7 @@ void solve_system(int N)
     double *cuda_csr_values;
 
     cudaMalloc(&cuda_csr_rowoffsets, sizeof(double) *(NN+1));
-    cudaMalloc(&cuda_nn_counts, sizeof(int) *(NN+1));
+    cudaMalloc(&cuda_nn_counts, sizeof(int) *(NN));
     cudaMalloc(&cuda_csr_values, sizeof(double) *n_values);
     cudaMalloc(&cuda_csr_col_indices, sizeof(double) *n_values);
 
@@ -392,8 +392,8 @@ void solve_system(int N)
     //
 
     // generate_fdm_laplace(N, csr_rowoffsets, csr_colindices,csr_values);
-    count_nnz<<<256, 256>>>(cuda_nn_counts, N, N);                                        // a)
-    exclusive_scan(cuda_nn_counts, cuda_csr_rowoffsets, NN);                                                                       // b)
+    count_nnz<<<256, 256>>>(cuda_nn_counts, N, N);                                                   // a)
+    exclusive_scan(cuda_nn_counts, cuda_csr_rowoffsets, NN+1);                                         // b)
     populate_matrix<<<256, 256>>>(cuda_csr_rowoffsets, cuda_csr_values, cuda_csr_col_indices, N, N); // c)
 
     //
@@ -402,7 +402,6 @@ void solve_system(int N)
     double *solution = (double *)malloc(sizeof(double) * NN);
     double *rhs = (double *)malloc(sizeof(double) * NN);
     std::fill(rhs, rhs + NN, 1);
-
 
     //
     // Call Conjugate Gradient implementation with GPU arrays
@@ -429,7 +428,7 @@ void solve_system(int N)
 int main()
 {
 
-    solve_system(100); // solves a system with 100*100 unknowns
+    solve_system(4); // solves a system with 100*100 unknowns
 
     return EXIT_SUCCESS;
 }

@@ -83,9 +83,9 @@ __global__ void count_nnz(int *nn_counts, int N, int M)
     }
 }
 
-__global__ void populate_matrix(int *row_offsets,double *values,int *col_indices,int N,int M)
+__global__ void populate_matrix(int *row_offsets, double *values, int *col_indices, int N, int M)
 {
-    for (int row = blockDim.x * blockIdx.x + threadIdx.x; row < N*M; row += gridDim.x * blockDim.x) 
+    for (int row = blockDim.x * blockIdx.x + threadIdx.x; row < N * M; row += gridDim.x * blockDim.x)
     {
         int i = row / N;
         int j = row % N;
@@ -97,39 +97,39 @@ __global__ void populate_matrix(int *row_offsets,double *values,int *col_indices
         this_row_offset += 1;
 
         // upper neighbor
-        if (i > 0) 
-        { 
-        //col_indices[this_row_offset] = (i-1)* N+j;
-        col_indices[this_row_offset] = (i-1)+N*j;
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (i > 0)
+        {
+            // col_indices[this_row_offset] = (i-1)* N+j;
+            col_indices[this_row_offset] = (i - 1) + N * j;
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // left neighbor
-        if (j > 0) 
-        { 
-        //col_indices[this_row_offset] = i* N +(j-1);
-        col_indices[this_row_offset] = i+ N *(j-1);
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (j > 0)
+        {
+            // col_indices[this_row_offset] = i* N +(j-1);
+            col_indices[this_row_offset] = i + N * (j - 1);
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // lower neighbor
-        if (i < N-1) 
-        { 
-        col_indices[this_row_offset] = (i+1)+N*j;
-        //col_indices[this_row_offset] = (i+1)* N +j;
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (i < N - 1)
+        {
+            col_indices[this_row_offset] = (i + 1) + N * j;
+            // col_indices[this_row_offset] = (i+1)* N +j;
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // right neighbour
-        if (j < M-1) 
-        { 
-        //col_indices[this_row_offset] = i*N +(j+1);
-        col_indices[this_row_offset] = i+ N *(j+1);
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (j < M - 1)
+        {
+            // col_indices[this_row_offset] = i*N +(j+1);
+            col_indices[this_row_offset] = i + N * (j + 1);
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
     }
 }
@@ -300,13 +300,7 @@ void conjugate_gradient(int NN, // number of unknows
 
         // line 4: A*p:
         cuda_csr_matvec_product<<<512, 512>>>(NN, csr_rowoffsets, csr_colindices, csr_values, cuda_p, cuda_Ap);
-        double *Ap = (double *)malloc(sizeof(double) * NN);
-        cudaMemcpy(Ap, cuda_Ap, NN*sizeof(double), cudaMemcpyDeviceToHost);
-        printf("\n\n");
-        for (int p=0;p<NN;p++)
-        {
-            printf("%f\n", Ap[p]);
-        }
+
         // lines 5,6:
         cudaMemcpy(cuda_scalar, &zero, sizeof(double), cudaMemcpyHostToDevice);
         cuda_dot_product<<<512, 512>>>(NN, cuda_p, cuda_Ap, cuda_scalar);
@@ -346,7 +340,7 @@ void conjugate_gradient(int NN, // number of unknows
     cudaDeviceSynchronize();
     std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
 
-    if (iters > 5)
+    if (iters > 1000)
         std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
                   << std::endl;
     else
@@ -364,28 +358,28 @@ void conjugate_gradient(int NN, // number of unknows
  */
 void solve_system(int N)
 {
-    int NN = N *N; // number of unknows to solve for
+    int NN = N * N; // number of unknows to solve for
 
     std::cout << "Solving Ax=b with " << NN << " unknowns." << std::endl;
 
     // Allocation sizes
-    int n_values = 5*(N-2)*(N-2)+4*4*(N-2)+4*3; //5*N*N is definitely sufficient, can we go exact? yes
+    int n_values = 5 * (N - 2) * (N - 2) + 4 * 4 * (N - 2) + 4 * 3; // 5*N*N is definitely sufficient, can we go exact? yes
     // int n_values = 5*NN;
-    
+
     // Allocate host arrays
-    int *csr_rowoffsets = (int *)malloc(sizeof(double) * (NN+1)); // N*M nodes ==> N*M rows
-    int *nn_counts = (int *)malloc(sizeof(int) *(NN));
-    double *csr_values = (double *)malloc(sizeof(double) *n_values);
-    int *csr_colindices = (int *)malloc(sizeof(double) *n_values); 
+    int *csr_rowoffsets = (int *)malloc(sizeof(double) * (NN + 1)); // N*M nodes ==> N*M rows
+    int *nn_counts = (int *)malloc(sizeof(int) * (NN));
+    double *csr_values = (double *)malloc(sizeof(double) * n_values);
+    int *csr_colindices = (int *)malloc(sizeof(double) * n_values);
 
     // Allocate CUDA-arrays
     int *cuda_csr_rowoffsets, *cuda_nn_counts, *cuda_csr_col_indices;
     double *cuda_csr_values;
 
-    cudaMalloc(&cuda_csr_rowoffsets, sizeof(double) *(NN+1));
-    cudaMalloc(&cuda_nn_counts, sizeof(int) *(NN));
-    cudaMalloc(&cuda_csr_values, sizeof(double) *n_values);
-    cudaMalloc(&cuda_csr_col_indices, sizeof(double) *n_values);
+    cudaMalloc(&cuda_csr_rowoffsets, sizeof(double) * (NN + 1));
+    cudaMalloc(&cuda_nn_counts, sizeof(int) * (NN));
+    cudaMalloc(&cuda_csr_values, sizeof(double) * n_values);
+    cudaMalloc(&cuda_csr_col_indices, sizeof(double) * n_values);
 
     //
     // fill CSR matrix with values ==> PLUG SELFMADE ASSEMBLY IN HERE
@@ -393,8 +387,15 @@ void solve_system(int N)
 
     // generate_fdm_laplace(N, csr_rowoffsets, csr_colindices,csr_values);
     count_nnz<<<256, 256>>>(cuda_nn_counts, N, N);                                                   // a)
-    exclusive_scan(cuda_nn_counts, cuda_csr_rowoffsets, NN+1);                                         // b)
+    exclusive_scan(cuda_nn_counts, cuda_csr_rowoffsets, NN + 1);                                     // b)
     populate_matrix<<<256, 256>>>(cuda_csr_rowoffsets, cuda_csr_values, cuda_csr_col_indices, N, N); // c)
+
+    //
+    // Copy to host for rel resiudal computation
+    //
+    cudaMemcpy(csr_rowoffsets, cuda_csr_rowoffsets, sizeof(double) * (NN + 1), cudaMemcpyDeviceToHost);
+    cudaMemcpy(csr_colindices, cuda_csr_col_indices, sizeof(double) * n_values, cudaMemcpyDeviceToHost);
+    cudaMemcpy(csr_values, cuda_csr_values, sizeof(double) * n_values, cudaMemcpyDeviceToHost);
 
     //
     // Allocate solution vector and right hand side:
@@ -415,6 +416,7 @@ void solve_system(int N)
     std::cout << "Relative residual norm: " << residual_norm
               << " (should be smaller than 1e-6)" << std::endl;
 
+    for (int i = 0; i <NN; i++) {std::cout <<solution[i] << std::endl;}
     cudaFree(cuda_csr_rowoffsets);
     cudaFree(cuda_csr_col_indices);
     cudaFree(cuda_csr_values);
@@ -425,10 +427,9 @@ void solve_system(int N)
     free(csr_values);
 }
 
+
 int main()
 {
-
-    solve_system(4); // solves a system with 100*100 unknowns
-
+    solve_system(10);
     return EXIT_SUCCESS;
 }

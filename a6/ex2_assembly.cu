@@ -28,9 +28,9 @@ __global__ void count_nnz(int *nn_counts, int N, int M)
     }
 }
 
-__global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,int N,int M)
+__global__ void populate_matrix(int *row_offsets, int *values, int *col_indices, int N, int M)
 {
-    for (int row = blockDim.x * blockIdx.x + threadIdx.x; row < N*M; row += gridDim.x * blockDim.x) 
+    for (int row = blockDim.x * blockIdx.x + threadIdx.x; row < N * M; row += gridDim.x * blockDim.x)
     {
         int i = row / N;
         int j = row % N;
@@ -42,39 +42,39 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         this_row_offset += 1;
 
         // upper neighbor
-        if (i > 0) 
-        { 
-        //col_indices[this_row_offset] = (i-1)* N+j;
-        col_indices[this_row_offset] = (i-1)+N*j;
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (i > 0)
+        {
+            // col_indices[this_row_offset] = (i-1)* N+j;
+            col_indices[this_row_offset] = (i - 1) + N * j;
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // left neighbor
-        if (j > 0) 
-        { 
-        //col_indices[this_row_offset] = i* N +(j-1);
-        col_indices[this_row_offset] = i+ N *(j-1);
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (j > 0)
+        {
+            // col_indices[this_row_offset] = i* N +(j-1);
+            col_indices[this_row_offset] = i + N * (j - 1);
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // lower neighbor
-        if (i < N-1) 
-        { 
-        col_indices[this_row_offset] = (i+1)+N*j;
-        //col_indices[this_row_offset] = (i+1)* N +j;
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (i < N - 1)
+        {
+            col_indices[this_row_offset] = (i + 1) + N * j;
+            // col_indices[this_row_offset] = (i+1)* N +j;
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
 
         // right neighbour
-        if (j < M-1) 
-        { 
-        //col_indices[this_row_offset] = i*N +(j+1);
-        col_indices[this_row_offset] = i+ N *(j+1);
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
+        if (j < M - 1)
+        {
+            // col_indices[this_row_offset] = i*N +(j+1);
+            col_indices[this_row_offset] = i + N * (j + 1);
+            values[this_row_offset] = -1;
+            this_row_offset += 1;
         }
     }
 }
@@ -199,68 +199,71 @@ float med(std::vector<float> log_vec)
 int main()
 {
 
-    int N = 2;
-    for (; N < 10; N *= 10)
+    int N = 16;
+    for (; N < 1025; N *= 2)
     {
         // Allocation sizes
-        int n_values = 5*(N-2)*(N-2)+4*4*(N-2)+4*3; //5*N*N is definitely sufficient, can we go exact? yes
+        int n_values = 5 * (N - 2) * (N - 2) + 4 * 4 * (N - 2) + 4 * 3; // 5*N*N is definitely sufficient, can we go exact? yes
         // Allocate host arrays
-        int *row_offsets = (int *)malloc(sizeof(int) * N * N); // N*M nodes ==> N*M rows
-        int *nn_counts = (int *)malloc(sizeof(int) *N* N);
-        int *values = (int *)malloc(sizeof(int) *n_values);
-        int *col_indices = (int *)malloc(sizeof(int) *n_values); 
+        int *row_offsets = (int *)malloc(sizeof(int) * (N * N + 1)); // N*M nodes ==> N*M rows
+        int *nn_counts = (int *)malloc(sizeof(int) * N * N);
+        int *values = (int *)malloc(sizeof(int) * n_values);
+        int *col_indices = (int *)malloc(sizeof(int) * n_values);
 
-        //for reference CPU application
-        int *row_offsets_cpu = (int *)malloc(sizeof(int) * N * N); // N*M nodes ==> N*M rows
-        int *nn_counts_cpu = (int *)malloc(sizeof(int) *N* N);
-        double *values_cpu = (double *)malloc(sizeof(double) *n_values);
-        int *col_indices_cpu = (int *)malloc(sizeof(int) *n_values); 
+        // for reference CPU application
+        int *row_offsets_cpu = (int *)malloc(sizeof(int) * (N * N + 1)); // N*M nodes ==> N*M rows
+        int *nn_counts_cpu = (int *)malloc(sizeof(int) * N * N);
+        double *values_cpu = (double *)malloc(sizeof(double) * n_values);
+        int *col_indices_cpu = (int *)malloc(sizeof(int) * n_values);
 
         // Allocate CUDA-arrays
         int *cuda_row_offsets, *cuda_nn_counts, *cuda_values, *cuda_col_indices;
-        cudaMalloc(&cuda_row_offsets, sizeof(int) *N* N);
-        cudaMalloc(&cuda_nn_counts, sizeof(int) *N* N);
-        cudaMalloc(&cuda_values, sizeof(int) *n_values);
-        cudaMalloc(&cuda_col_indices, sizeof(int) *n_values);
+        cudaMalloc(&cuda_row_offsets, sizeof(int) * N * N);
+        cudaMalloc(&cuda_nn_counts, sizeof(int) * N * N);
+        cudaMalloc(&cuda_values, sizeof(int) * n_values);
+        cudaMalloc(&cuda_col_indices, sizeof(int) * n_values);
 
         // save data struc
         std::vector<float> log_assembly;
+        std::vector<float> log_lagrange;
 
         // initiate timer
         Timer timer;
 
-        for (int j = 0; j < 11; j++)
+        for (int j = 0; j < 3; j++)
         {
             // Matrix assembly
-            CUDA_ERRCHK(cudaDeviceSynchronize());
+            cudaDeviceSynchronize();
             timer.reset();
-            count_nnz<<<256, 256>>>(cuda_nn_counts, N, N); //a)
-            exclusive_scan(cuda_nn_counts,cuda_row_offsets, N*N); //b)
-            populate_matrix<<<256,256>>>(cuda_row_offsets,cuda_values,cuda_col_indices,N,N); //c)
+            count_nnz<<<256, 256>>>(cuda_nn_counts, N, N);                                        // a)
+            exclusive_scan(cuda_nn_counts, cuda_row_offsets, N * N + 1);                          // b)
+            populate_matrix<<<256, 256>>>(cuda_row_offsets, cuda_values, cuda_col_indices, N, N); // c)
             log_assembly.push_back(timer.get());
-            CUDA_ERRCHK(cudaDeviceSynchronize());
+            cudaDeviceSynchronize();
 
-            //reference CPU version
+            // reference CPU version
+            cudaDeviceSynchronize();
+            timer.reset();
             generate_fdm_laplace(N, row_offsets_cpu, col_indices_cpu, values_cpu);
-                
-            //copy back to CPU
-            cudaMemcpy(nn_counts, cuda_nn_counts, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
-            cudaMemcpy(row_offsets, cuda_row_offsets, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
-            cudaMemcpy(values, cuda_values, sizeof(int)*n_values, cudaMemcpyDeviceToHost);
-            cudaMemcpy(col_indices, cuda_col_indices, sizeof(int)*n_values, cudaMemcpyDeviceToHost);
-            
+            log_lagrange.push_back(timer.get());
+            cudaDeviceSynchronize();
         }
 
         // define median
         float log_assembly_av = med(log_assembly);
+        float log_lagrange_av = med(log_lagrange);
 
         // output
-        std::cout << N << " " << 1e3 * log_assembly_av << std::endl; // milli seconds
+        std::cout << N << " " << 1e3 * log_assembly_av << " " << 1e3 * log_lagrange_av << std::endl; // milli seconds
 
-
-
-        
+        /*
         // OUTPUT FOR VALIDATION (small N)
+        //copy back to CPU
+        cudaMemcpy(nn_counts, cuda_nn_counts, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(row_offsets, cuda_row_offsets, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(values, cuda_values, sizeof(int)*n_values, cudaMemcpyDeviceToHost);
+        cudaMemcpy(col_indices, cuda_col_indices, sizeof(int)*n_values, cudaMemcpyDeviceToHost);
+
         std::cout << "nn_counts:\n";
         for (int i = 0; i < N*N; ++i)
             std::cout << nn_counts[i] << std::endl;
@@ -279,9 +282,7 @@ int main()
         std::cout << "row offsets:\n";
         for (int i = 0; i < N*N+1; ++i)
             std::cout << row_offsets[i]<< " "<<row_offsets_cpu[i] << std::endl;
-
-
-        
+        */
 
         // Clean up:
         free(row_offsets);

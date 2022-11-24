@@ -14,28 +14,105 @@ data_ex1 = np.genfromtxt(filepath1, dtype=float, delimiter=' ')
 filepath2 = "data/ex1k40.txt"
 data_ex2 = np.genfromtxt(filepath2, dtype=float, delimiter=' ')
 
+filepath3 = "data/ex2rtx.txt"
+data_3= np.genfromtxt(filepath3, dtype=float, delimiter=' ')
+filepath4 = "data/ex2k40.txt"
+data_4= np.genfromtxt(filepath4, dtype=float, delimiter=' ')
+filepath6 = "data/ex2cg.txt"
+data_6= np.genfromtxt(filepath6, dtype=float, delimiter=' ')
+
 
 filepath5 = "data/ex2bonus.txt"
 data_ex5 = np.genfromtxt(filepath5, dtype=float, delimiter=' ')
 
 
-# filepath3 = "data/dense_matrix_GB_k40.txt"
-# data_dense= np.genfromtxt(filepath3, dtype=float, delimiter=' ')
+
+# plot - ex2rtx
+N = []
+t_gpu= []
+t_cpu= []
+t_cg=[]
+
+for i in range(len(data_3)):
+    N.append(data_3
+             [i][0])
+    t_gpu.append(data_3
+             [i][1])
+    t_cpu.append(data_3
+             [i][2])
+    t_cg.append(data_6
+             [i][1])
+
+
+plt.figure(figsize=(10, 5))
+plt.plot(N, t_gpu,
+         label="assembly via gpu", color='y', linestyle='dotted', linewidth=10)
+plt.plot(N, t_cpu,
+         label="assembly via cpu", color='r')
+plt.plot(N, t_cg,
+         label="cg kernel", color='b')
+#plt.plot(k, data , label = "time_custom")
+plt.xscale('log', base=10)
+plt.yscale('log', base=10)
+plt.xlabel("grid size N (=points in one direction)")
+plt.ylabel("computation time[ms]")
+plt.legend()
+plt.title(
+    "Performance of GPU- vs CPU-powered matrix assembly on RTX3060 compared to GPU-CG on RTX3060")
+plt.grid()
+plt.savefig("plots/ex2rtx.jpg", bbox_inches='tight')
 
 
 
-data_ex5=np.reshape(data_ex5,(10,10))
-#data_ex5.reshape((10,10))
 
-ax=sns.heatmap(data_ex5,linewidth=0.5)
+# plot - ex2k40
+N = []
+t_gpu= []
+t_cpu= []
+t_cg=[]
 
-plt.savefig("plots/ex2bonus.jpg", bbox_inches='tight')
+for i in range(len(data_4)):
+    N.append(data_4
+             [i][0])
+    t_gpu.append(data_4
+             [i][1])
+    t_cpu.append(data_4
+             [i][2])
+    t_cg.append(data_6
+             [i][1])
+
+
+plt.figure(figsize=(10, 5))
+plt.plot(N, t_gpu,
+         label="assembly via gpu", color='y', linestyle='dotted', linewidth=10)
+plt.plot(N, t_cpu,
+         label="assembly via cpu", color='r')
+plt.plot(N, t_cg,
+         label="cg kernel", color='b')
+#plt.plot(k, data , label = "time_custom")
+plt.xscale('log', base=10)
+plt.yscale('log', base=10)
+plt.xlabel("grid size N (=points in one direction)")
+plt.ylabel("computation time[ms]")
+plt.legend()
+plt.title(
+    "Performance of GPU- vs CPU-powered matrix assembly on K40 compared to GPU-CG on RTX3060")
+plt.grid()
+plt.savefig("plots/ex2k40.jpg", bbox_inches='tight')
 
 
 
 
 
 
+
+
+# data_ex5=np.reshape(data_ex5,(10,10))
+# #data_ex5.reshape((10,10))
+
+# ax=sns.heatmap(data_ex5,linewidth=0.5)
+
+# plt.savefig("plots/ex2bonus.jpg", bbox_inches='tight')
 
 # # plot1 - ex1rtx
 # N = []

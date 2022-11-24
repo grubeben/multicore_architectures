@@ -44,7 +44,15 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // upper neighbor
         if (i > 0) 
         { 
-        col_indices[this_row_offset] = (i-1) * N + j;
+        col_indices[this_row_offset] = (i-1)* N+j;
+        values[this_row_offset] = -1;
+        this_row_offset += 1;
+        }
+
+        // left neighbor
+        if (j > 0) 
+        { 
+        col_indices[this_row_offset] = i* N +(j-1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -52,22 +60,15 @@ __global__ void populate_matrix(int *row_offsets,int *values,int *col_indices,in
         // lower neighbor
         if (i < N-1) 
         { 
-        col_indices[this_row_offset] = (i+1) * N + j;
+        col_indices[this_row_offset] = (i+1)* N +j;
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
 
-        // left and right neighbor
-        if (j > 0) 
-        { 
-        col_indices[this_row_offset] = i * N + j-1;
-        values[this_row_offset] = -1;
-        this_row_offset += 1;
-        }
-
+        // right neighbour
         if (j < M-1) 
         { 
-        col_indices[this_row_offset] = i* N + j+1;
+        col_indices[this_row_offset] = i+ N *(j+1);
         values[this_row_offset] = -1;
         this_row_offset += 1;
         }
@@ -195,7 +196,7 @@ int main()
 {
 
     int N = 3;
-    for (; N < 10; N *= 10)
+    for (; N < 11; N *= 10)
     {
         // Allocation sizes
         int n_values = 5*(N-2)*(N-2)+4*4*(N-2)+4*3; //5*N*N is definitely sufficient, can we go exact? yes
@@ -204,6 +205,12 @@ int main()
         int *nn_counts = (int *)malloc(sizeof(int) *N* N);
         int *values = (int *)malloc(sizeof(int) *n_values);
         int *col_indices = (int *)malloc(sizeof(int) *n_values); 
+
+        //for reference CPU application
+        int *row_offsets_cpu = (int *)malloc(sizeof(int) * N * N); // N*M nodes ==> N*M rows
+        int *nn_counts_cpu = (int *)malloc(sizeof(int) *N* N);
+        double *values_cpu = (double *)malloc(sizeof(double) *n_values);
+        int *col_indices_cpu = (int *)malloc(sizeof(int) *n_values); 
 
         // Allocate CUDA-arrays
         int *cuda_row_offsets, *cuda_nn_counts, *cuda_values, *cuda_col_indices;
@@ -223,14 +230,15 @@ int main()
             // Matrix assembly
             CUDA_ERRCHK(cudaDeviceSynchronize());
             timer.reset();
-
             count_nnz<<<256, 256>>>(cuda_nn_counts, N, N); //a)
             exclusive_scan(cuda_nn_counts,cuda_row_offsets, N*N); //b)
             populate_matrix<<<256,256>>>(cuda_row_offsets,cuda_values,cuda_col_indices,N,N); //c)
-
             log_assembly.push_back(timer.get());
             CUDA_ERRCHK(cudaDeviceSynchronize());
-            
+
+            //reference CPU version
+            generate_fdm_laplace(N, row_offsets_cpu, col_indices_cpu, values_cpu);
+                
             //copy back to CPU
             cudaMemcpy(nn_counts, cuda_nn_counts, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
             cudaMemcpy(row_offsets, cuda_row_offsets, sizeof(int)*N * N, cudaMemcpyDeviceToHost);
@@ -245,7 +253,8 @@ int main()
         // output
         std::cout << N << " " << 1e3 * log_assembly_av << std::endl; // milli seconds
 
-        
+
+
         
         // OUTPUT FOR VALIDATION (small N)
         std::cout << "nn_counts:\n";
@@ -255,27 +264,29 @@ int main()
 
         std::cout << "values:\n";
         for (int i = 0; i < n_values; ++i)
-            std::cout << values[i] << std::endl;
+            std::cout << values[i]<< " "<<values_cpu[i] << std::endl;
         std::cout << "\n";
 
         std::cout << "col indeces:\n";
         for (int i = 0; i < n_values; ++i)
-            std::cout << col_indices[i] << std::endl;
+            std::cout << col_indices[i]<< " "<<col_indices_cpu[i]  << std::endl;
         std::cout << "\n";
 
         std::cout << "row offsets:\n";
         for (int i = 0; i < N*N; ++i)
-            std::cout << row_offsets[i] << std::endl;
-        std::cout << "\n";
-
+            std::cout << row_offsets[i]<< " "<<row_offsets_cpu[i] << std::endl;
+        
 
         
 
         // Clean up:
         free(row_offsets);
+        free(row_offsets_cpu);
         free(values);
+        free(values_cpu);
         free(nn_counts);
         free(col_indices);
+        free(col_indices_cpu);
         cudaFree(cuda_row_offsets);
         cudaFree(cuda_nn_counts);
         cudaFree(cuda_values);

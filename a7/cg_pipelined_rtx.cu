@@ -7,39 +7,47 @@
 // result = (x, y)
 __global__ void cuda_dot_product(int N, double *x, double *y, double *result)
 {
-  __shared__ double shared_mem[512];
+    __shared__ double shared_mem[512];
 
-  double dot = 0;
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x) {
-    dot += x[i] * y[i];
-  }
-
-  shared_mem[threadIdx.x] = dot;
-  for (int k = blockDim.x / 2; k > 0; k /= 2) {
-    __syncthreads();
-    if (threadIdx.x < k) {
-      shared_mem[threadIdx.x] += shared_mem[threadIdx.x + k];
+    double dot = 0;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
+    {
+        dot += x[i] * y[i];
     }
-  }
 
-  if (threadIdx.x == 0) atomicAdd(result, shared_mem[0]);
+    shared_mem[threadIdx.x] = dot;
+    for (int k = blockDim.x / 2; k > 0; k /= 2)
+    {
+        __syncthreads();
+        if (threadIdx.x < k)
+        {
+            shared_mem[threadIdx.x] += shared_mem[threadIdx.x + k];
+        }
+    }
+
+    if (threadIdx.x == 0)
+        atomicAdd(result, shared_mem[0]);
 }
 
 // features 3 vec_adds and 1 dp
-__global__ void kernel1(int N, double *Ap, double *x, double *r, double *p, 
+__global__ void kernel1(int N, double *Ap, double *x, double *r, double *p,
                         double alpha, double beta, double *rr)
 {
     __shared__ double shared_mem[512];
     double dot = 0;
+    double t1, t2, t3;
 
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
     {
         // vecadds
-        x[i] += alpha * p[i];
-        r[i] -= alpha * Ap[i];
-        p[i] = r[i] + beta * p[i]; // is r[i] guaranteed to be computed?
+        t1 = x[i] + alpha * p[i];
+        t2 = r[i] - alpha * Ap[i];
+        t3 = t2 + beta * p[i];
         // dotp
-        dot += r[i] * r[i];
+        dot += t2 * t2;
+        x[i] = t1;
+        r[i] = t2;
+        p[i] = t3;
     }
 
     shared_mem[threadIdx.x] = dot;
@@ -57,7 +65,7 @@ __global__ void kernel1(int N, double *Ap, double *x, double *r, double *p,
 }
 
 // features 1 matvec and 2 dps
-__global__ void kernel2(int N, int *A_csr_rowoffsets, int *A_csr_colindices, 
+__global__ void kernel2(int N, int *A_csr_rowoffsets, int *A_csr_colindices,
                         double *A_csr_values, double *p, double *Ap, double *ApAp,
                         double *pAp)
 {
@@ -96,8 +104,6 @@ __global__ void kernel2(int N, int *A_csr_rowoffsets, int *A_csr_colindices,
     {
         atomicAdd(ApAp, shared_mem1[0]);
         atomicAdd(pAp, shared_mem2[0]);
-        //printf("\n atomicAdd to ApAp: %g", shared_mem1[0]);
-        //printf("\n atomicAdd to pAp: %g", shared_mem2[0]);
     }
 }
 
@@ -123,6 +129,8 @@ void conjugate_gradient(int N, // number of unknows
 
     // initialize work vectors:
     double alpha, beta, pAp, rr;
+    const double zero = 0;
+
     double *cuda_solution, *cuda_p, *cuda_r, *cuda_Ap, *cuda_rr, *cuda_ApAp, *cuda_pAp;
     cudaMalloc(&cuda_p, sizeof(double) * N);
     cudaMalloc(&cuda_r, sizeof(double) * N);
@@ -136,23 +144,20 @@ void conjugate_gradient(int N, // number of unknows
     cudaMemcpy(cuda_r, rhs, sizeof(double) * N, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_solution, solution, sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    //compute rr0
+    // compute rr0
     cuda_dot_product<<<512, 512>>>(N, cuda_r, cuda_r, cuda_rr);
     cudaMemcpy(&rr, cuda_rr, sizeof(double), cudaMemcpyDeviceToHost);
 
-    //compute alpha, beta, Ap once prior to interating ==> this doesnt satisfy "2 kernels per iteration"
+    // compute alpha, beta, Ap once prior to interating ==> this does satisfy "2 kernels per iteration"
     kernel2<<<512, 512>>>(N, csr_rowoffsets, csr_colindices, csr_values, cuda_p, cuda_Ap, cuda_ApAp, cuda_pAp);
     cudaMemcpy(&beta, cuda_ApAp, sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(&pAp, cuda_pAp, sizeof(double), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
 
-    alpha = rr/pAp;
-    beta *=alpha*alpha;
-    beta=beta-rr;
-    beta/=rr;
-    
-    printf("\nstarting alpha, beta: %g, %g\n", alpha, beta);
-    printf("\nstarting rr: %g\n", rr);
+    alpha = rr / pAp;
+    beta *= alpha * alpha;
+    beta = beta - rr;
+    beta /= rr;
 
     double initial_residual_squared = rr;
     int iters = 0;
@@ -160,34 +165,37 @@ void conjugate_gradient(int N, // number of unknows
     timer.reset();
     while (1)
     {
+        // reset rr, ApAp, pAp
+        cudaMemcpy(cuda_rr, &zero, sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(cuda_ApAp, &zero, sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(cuda_pAp, &zero, sizeof(double), cudaMemcpyHostToDevice);
+
         // lines 2-4
         kernel1<<<512, 512>>>(N, cuda_Ap, cuda_solution, cuda_r, cuda_p, alpha, beta, cuda_rr);
 
-        cudaMemcpy(solution, cuda_solution, sizeof(double) * N, cudaMemcpyDeviceToHost);
+        //cudaMemcpy(solution, cuda_solution, sizeof(double) * N, cudaMemcpyDeviceToHost);
         //for (int l=0; l<N; l++)printf("%g\n", solution[l]);
-        printf("\n");
+        //printf("\n");
 
         // lines 5,6
-        kernel2<<<512, 512>>>(N, csr_rowoffsets, csr_colindices, csr_values, cuda_p, cuda_Ap, 
-                            cuda_ApAp, cuda_pAp);
-        //copy to host
+        kernel2<<<512, 512>>>(N, csr_rowoffsets, csr_colindices, csr_values, cuda_p, cuda_Ap,
+                              cuda_ApAp, cuda_pAp);
+        // copy to host
         cudaMemcpy(&beta, cuda_ApAp, sizeof(double), cudaMemcpyDeviceToHost);
         cudaMemcpy(&pAp, cuda_pAp, sizeof(double), cudaMemcpyDeviceToHost);
         cudaMemcpy(&rr, cuda_rr, sizeof(double), cudaMemcpyDeviceToHost);
-        //compute alpha, beta
-        alpha = rr/pAp;
-        beta *=alpha*alpha;
-        beta-=rr;
-        beta/=rr;
+        // compute alpha, beta
+        alpha = rr / pAp;
+        //printf("pAp: %g, ApAp: %g\n", pAp,beta);
+        beta = (beta * alpha * alpha - rr) / rr;
+        //printf("rr: %g, alpha: %g, beta: %g\n", rr, alpha, beta);
 
-        printf("\n rr: %g\n", rr);
-        // line 10:
         if (std::sqrt(rr / initial_residual_squared) < 1e-6)
         {
             break;
         }
 
-        if (iters > 10)
+        if (iters > 2)
             break; // solver didn't converge
         ++iters;
     }
@@ -196,8 +204,8 @@ void conjugate_gradient(int N, // number of unknows
     cudaDeviceSynchronize();
     std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
 
-    if (iters > 10)
-        std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
+    if (iters > 2)
+        std::cout << "Conjugate Gradient did NOT converge within " << iters << " iterations"
                   << std::endl;
     else
         std::cout << "Conjugate Gradient converged in " << iters << " iterations."

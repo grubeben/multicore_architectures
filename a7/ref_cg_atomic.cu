@@ -108,10 +108,15 @@ void conjugate_gradient(int N, // number of unknows
     cudaMemcpy(cuda_scalar, &zero, sizeof(double), cudaMemcpyHostToDevice);
     cuda_dot_product<<<512, 512>>>(N, cuda_p, cuda_Ap, cuda_scalar);
     cudaMemcpy(&alpha, cuda_scalar, sizeof(double), cudaMemcpyDeviceToHost);
+    //printf("pAp: %g\n", alpha);
     alpha = residual_norm_squared / alpha;
 
     // line 7:
     cuda_vecadd<<<512, 512>>>(N, cuda_solution, cuda_p, alpha);
+
+    //cudaMemcpy(solution, cuda_solution, sizeof(double) * N, cudaMemcpyDeviceToHost);
+    //for (int l=0; l<N; l++)printf("%g\n", solution[l]);
+    //printf("\n");
 
     // line 8:
     cuda_vecadd<<<512, 512>>>(N, cuda_r, cuda_Ap, -alpha);
@@ -129,11 +134,12 @@ void conjugate_gradient(int N, // number of unknows
 
     // line 11:
     beta = residual_norm_squared / beta;
+    printf("rr: %g, alpha: %g, beta: %g\n", residual_norm_squared, alpha, beta);
 
     // line 12:
     cuda_vecadd2<<<512, 512>>>(N, cuda_p, cuda_r, beta);
 
-    if (iters > 10000)
+    if (iters > 2)
       break; // solver didn't converge
     ++iters;
   }
@@ -142,8 +148,8 @@ void conjugate_gradient(int N, // number of unknows
   cudaDeviceSynchronize();
   std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
 
-  if (iters > 10000)
-    std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
+  if (iters > 2)
+    std::cout << "Conjugate Gradient did NOT converge within" << iters <<"iterations"
               << std::endl;
   else
     std::cout << "Conjugate Gradient converged in " << iters << " iterations."
@@ -226,7 +232,7 @@ void solve_system(int points_per_direction) {
 
 int main() {
 
-  solve_system(1000); // solves a system with 100*100 unknowns
+  solve_system(3); // solves a system with 100*100 unknowns
 
   return EXIT_SUCCESS;
 }

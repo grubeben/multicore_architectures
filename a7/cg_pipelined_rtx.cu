@@ -37,7 +37,7 @@ __global__ void kernel1(int N, double *Ap, double *x, double *r, double *p,
         // vecadds
         x[i] += alpha * p[i];
         r[i] -= alpha * Ap[i];
-        p[i] = r[i] + beta * p[i]; // is r[i] guaranteed to be be r[i] computed?
+        p[i] = r[i] + beta * p[i]; // is r[i] guaranteed to be computed?
         // dotp
         dot += r[i] * r[i];
     }
@@ -93,8 +93,12 @@ __global__ void kernel2(int N, int *A_csr_rowoffsets, int *A_csr_colindices,
         }
     }
     if (threadIdx.x == 0)
+    {
         atomicAdd(ApAp, shared_mem1[0]);
         atomicAdd(pAp, shared_mem2[0]);
+        //printf("\n atomicAdd to ApAp: %g", shared_mem1[0]);
+        //printf("\n atomicAdd to pAp: %g", shared_mem2[0]);
+    }
 }
 
 /** Implementation of the conjugate gradient algorithm.

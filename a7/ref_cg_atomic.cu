@@ -134,26 +134,26 @@ void conjugate_gradient(int N, // number of unknows
 
     // line 11:
     beta = residual_norm_squared / beta;
-    printf("rr: %g, alpha: %g, beta: %g\n", residual_norm_squared, alpha, beta);
+    //printf("rr: %g, alpha: %g, beta: %g\n", residual_norm_squared, alpha, beta);
 
     // line 12:
     cuda_vecadd2<<<512, 512>>>(N, cuda_p, cuda_r, beta);
 
-    if (iters > 2)
+    if (iters > 10000)
       break; // solver didn't converge
     ++iters;
   }
   cudaMemcpy(solution, cuda_solution, sizeof(double) * N, cudaMemcpyDeviceToHost);
 
   cudaDeviceSynchronize();
-  std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
+  std::cout << N <<  " " << timer.get() << std::endl;
 
-  if (iters > 2)
-    std::cout << "Conjugate Gradient did NOT converge within" << iters <<"iterations"
-              << std::endl;
-  else
-    std::cout << "Conjugate Gradient converged in " << iters << " iterations."
-              << std::endl;
+  // if (iters > 2)
+  //   std::cout << "Conjugate Gradient did NOT converge within" << iters <<"iterations"
+  //             << std::endl;
+  // else
+  //   std::cout << "Conjugate Gradient converged in " << iters << " iterations."
+  //             << std::endl;
 
   cudaFree(cuda_p);
   cudaFree(cuda_r);
@@ -169,7 +169,7 @@ void solve_system(int points_per_direction) {
   int N = points_per_direction *
           points_per_direction; // number of unknows to solve for
 
-  std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
+  //std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
 
   //
   // Allocate CSR arrays.
@@ -217,8 +217,8 @@ void solve_system(int points_per_direction) {
   // Check for convergence:
   //
   double residual_norm = relative_residual(N, csr_rowoffsets, csr_colindices, csr_values, rhs, solution);
-  std::cout << "Relative residual norm: " << residual_norm
-            << " (should be smaller than 1e-6)" << std::endl;
+  //std::cout << "Relative residual norm: " << residual_norm
+  //          << " (should be smaller than 1e-6)" << std::endl;
 
   cudaFree(cuda_csr_rowoffsets);
   cudaFree(cuda_csr_colindices);
@@ -231,8 +231,10 @@ void solve_system(int points_per_direction) {
 }
 
 int main() {
-
-  solve_system(3); // solves a system with 100*100 unknowns
+  for (int i = 16; i <1e8+1; i*=2)
+  {
+    solve_system(i); 
+  }
 
   return EXIT_SUCCESS;
 }

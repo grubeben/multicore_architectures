@@ -19,6 +19,8 @@ filepath3 = "data/dp_rtx_cuda.txt"
 data_3= np.genfromtxt(filepath3, dtype=float, delimiter=' ')
 filepath4 = "data/dp_k40_cuda.txt"
 data_4= np.genfromtxt(filepath4, dtype=float, delimiter=' ')
+filepath5 = "data/dp_cpu.txt"
+data_5= np.genfromtxt(filepath5, dtype=float, delimiter=' ')
 
 
 # filepath6 = "data/ex2cg.txt"
@@ -36,6 +38,7 @@ rtx_cuda= []
 rtx_ocl= []
 k40_cuda=[]
 k40_ocl=[]
+cpu=[]
 
 for i in range(len(data_1)):
     N.append(data_1
@@ -47,6 +50,8 @@ for i in range(len(data_1)):
     k40_cuda.append(data_4
              [i][1])
     k40_ocl.append(data_2
+             [i][1])
+    cpu.append(data_5
              [i][1])
 
 
@@ -60,6 +65,8 @@ plt.plot(N, k40_ocl,
          label="K40 OCL", color='r',linestyle='dotted')
 plt.plot(N, k40_cuda,
          label="K40 CUDA", color='r')
+plt.plot(N, cpu,
+         label="CPU (pthread-Intel(R) Core(TM) i7 CPU)", color='b')
 
 plt.xscale('log', base=10)
 plt.yscale('log', base=10)

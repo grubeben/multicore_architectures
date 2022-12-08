@@ -66,7 +66,7 @@ int main()
   cl_uint num_platforms;
   cl_platform_id platform_ids[42];   //no more than 42 platforms supported...
   err = clGetPlatformIDs(42, platform_ids, &num_platforms); OPENCL_ERR_CHECK(err);
-  cl_platform_id my_platform = platform_ids[0];
+  cl_platform_id my_platform = platform_ids[1];
   err= clGetPlatformInfo(my_platform, CL_PLATFORM_VENDOR, sizeof(char)*63, platform_name, &platform_name_len);
 
 
@@ -85,12 +85,12 @@ int main()
   err = clGetDeviceInfo(my_device_id, CL_DEVICE_NAME, sizeof(char)*63, device_name, &device_name_len); OPENCL_ERR_CHECK(err);
 
   // platform and device info
-  /*
+  
   std::cout << "# Platforms found: " << num_platforms << std::endl;
   std::cout << "Using the following platform: " << platform_name << std::endl;
   std::cout << "# Devices found: " << num_devices << std::endl;
-  std::cout << "Using the following device: " << device_name << std::endl;
-  */
+  std::cout << "Using the following device: \n\n" << device_name << std::endl;
+  
 
   //
   // Create context: WHERE IS CONTEXT LINKED TO PLATFORM?

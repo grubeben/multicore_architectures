@@ -45,7 +45,7 @@ const char *my_opencl_program = ""
 "   }\n"
 
 "   barrier(CLK_GLOBAL_MEM_FENCE);\n"
-"   if (get_local_id(0)==0) partial_result[get_global_id(0)]=shared_mem[0];"
+"   if (get_local_id(0)==0) partial_result[get_group_id(0)]=shared_mem[0];"
 ""
 "}";  // you can have multiple kernels within a single OpenCL program. For simplicity, this OpenCL program contains only a single kernel.
 
@@ -142,11 +142,15 @@ int main()
   //
   // Set up buffers on host:
   //
-  cl_uint group_size= 128;
+  size_t  local_size = 128;     //n_blocks
+  size_t global_size = 128*128; //n_blocks*n_threads
+
   cl_uint vector_size = 128*1024;
+  cl_uint group_size= local_size;
+
   std::vector<ScalarType> x(vector_size, 1.0); 
   std::vector<ScalarType> y(vector_size, 2.0);
-  std::vector<ScalarType> z(vector_size, 0.0);
+  std::vector<ScalarType> z(group_size, 0.0);
 
   std::cout << std::endl;
   std::cout << "Vectors before kernel launch:" << std::endl;
@@ -159,14 +163,12 @@ int main()
   //
   cl_mem ocl_x = clCreateBuffer(my_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, vector_size * sizeof(ScalarType), &(x[0]), &err); OPENCL_ERR_CHECK(err);
   cl_mem ocl_y = clCreateBuffer(my_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, vector_size * sizeof(ScalarType), &(y[0]), &err); OPENCL_ERR_CHECK(err);
-  cl_mem ocl_z = clCreateBuffer(my_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, vector_size * sizeof(ScalarType), &(z[0]), &err); OPENCL_ERR_CHECK(err);
+  cl_mem ocl_z = clCreateBuffer(my_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, group_size * sizeof(ScalarType), &(z[0]), &err); OPENCL_ERR_CHECK(err);
 
 
   //
   /////////////////////////// Part 4: Run kernel ///////////////////////////////////
   //
-  size_t  local_size = 128;     //n_blocks
-  size_t global_size = 128*128; //n_blocks*n_threads
 
   //
   // Set kernel arguments:

@@ -94,7 +94,7 @@ void conjugate_gradient(int N, // number of unknows
   cudaMemcpy(partial, cuda_partial, sizeof(double) * 256, cudaMemcpyDeviceToHost);
 
   // CHECK UP
-  std::cout<< "first dot product: "<<*partial<< std::endl;
+  // std::cout<< "first dot product: "<<*partial<< std::endl;
 
   residual_norm_squared = 0;
   for (size_t i=0; i<256; ++i) residual_norm_squared += partial[i];
@@ -117,7 +117,7 @@ void conjugate_gradient(int N, // number of unknows
     alpha = residual_norm_squared / alpha;
 
     // CHECK UP
-    std::cout<< "dot product line 6: "<<*partial<< std::endl;
+    //std::cout<< "dot product line 6: "<<*partial<< std::endl;
  
     // line 7:
     cuda_vecadd<<<512, 512>>>(N, cuda_solution, cuda_p, alpha);
@@ -131,13 +131,13 @@ void conjugate_gradient(int N, // number of unknows
     cudaMemcpy(partial, cuda_partial, sizeof(double) * 256, cudaMemcpyDeviceToHost);
 
     // CHECK UP
-    std::cout<< "dot product line 9: "<<*partial<< std::endl;
+    //std::cout<< "dot product line 9: "<<*partial<< std::endl;
 
     residual_norm_squared = 0;
     for (size_t i=0; i<256; ++i) residual_norm_squared += partial[i];
 
     // CHECK UP
-    std::cout << "residual_norm_squared:" << std::sqrt(residual_norm_squared / initial_residual_squared) << std::endl;
+    // std::cout << "residual_norm_squared:" << std::sqrt(residual_norm_squared / initial_residual_squared) << std::endl;
  
     // line 10:
     if (std::sqrt(residual_norm_squared / initial_residual_squared) < 1e-6) {
@@ -155,19 +155,19 @@ void conjugate_gradient(int N, // number of unknows
     ++iters;
 
     //CHECK UP
-    std::cout <<"\n"<< std::endl;
+    // std::cout <<"\n"<< std::endl;
   }
   cudaMemcpy(solution, cuda_solution, sizeof(double) * N, cudaMemcpyDeviceToHost);
  
   cudaDeviceSynchronize();
-  std::cout << "Time elapsed: " << timer.get() << " (" << timer.get() / iters << " per iteration)" << std::endl;
+  std::cout << N << " " << timer.get() << std::endl;
  
-  if (iters > 10000)
-    std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
-              << std::endl;
-  else
-    std::cout << "Conjugate Gradient converged in " << iters << " iterations."
-              << std::endl;
+  // if (iters > 10000)
+  //   std::cout << "Conjugate Gradient did NOT converge within 10000 iterations"
+  //             << std::endl;
+  // else
+  //   std::cout << "Conjugate Gradient converged in " << iters << " iterations."
+  //             << std::endl;
  
   cudaFree(cuda_p);
   cudaFree(cuda_r);
@@ -183,7 +183,7 @@ void solve_system(int points_per_direction) {
   int N = points_per_direction *
           points_per_direction; // number of unknows to solve for
  
-  std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
+  //std::cout << "Solving Ax=b with " << N << " unknowns." << std::endl;
  
   //
   // Allocate CSR arrays.
@@ -230,9 +230,9 @@ void solve_system(int points_per_direction) {
   //
   // Check for convergence:
   //
-  double residual_norm = relative_residual(N, csr_rowoffsets, csr_colindices, csr_values, rhs, solution);
-  std::cout << "Relative residual norm: " << residual_norm
-            << " (should be smaller than 1e-6)" << std::endl;
+  // double residual_norm = relative_residual(N, csr_rowoffsets, csr_colindices, csr_values, rhs, solution);
+  // std::cout << "Relative residual norm: " << residual_norm
+  //           << " (should be smaller than 1e-6)" << std::endl;
  
   cudaFree(cuda_csr_rowoffsets);
   cudaFree(cuda_csr_colindices);
@@ -246,7 +246,10 @@ void solve_system(int points_per_direction) {
  
 int main() {
  
-  solve_system(3); // solves a system with 100*100 unknowns
- 
+  for (int i = 16; i < 10000; i*=2)
+  {
+      solve_system(i);
+  }
+
   return EXIT_SUCCESS;
 }

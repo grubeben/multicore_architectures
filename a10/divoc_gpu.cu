@@ -17,7 +17,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// Step 1 2 3 in one kernel: 
+// STEP 1 2 3 IN ONE KERNEL: 
 // 1: determine number of infections and recoveries;
 // 2: determine today's transmission probability and contacts based on pandemic situation;
 // 3: pass on infections within population;
@@ -117,7 +117,7 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
     }
 }
 
-// wrap kernels; init_input and init_output must be called prior because they fill dev arrays
+// KERNEL WRAP; init_input and init_output must be called prior because they fill dev arrays
 void run_simulation_gpu(const SimInput_t *input, SimOutput_t *output)
 {
     for (int day = 0; day < 365; ++day) // loop over all days of the year
@@ -194,7 +194,7 @@ typedef struct
     int *infected_on_dev;
 } SimOutput_t;
 
-// FREE STUFF
+// FREE DATA
 // there must be a better way of doing this (as part of the struct?)
 void destruction(SimInput_t input, SimOutput_t output)
 {
@@ -223,6 +223,7 @@ void destruction(SimInput_t input, SimOutput_t output)
 // Data Initialization /////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+
 // INPUT DATA
 void init_input(SimInput_t *input)
 {
@@ -232,7 +233,8 @@ void init_input(SimInput_t *input)
 
     input->population_size = 8916845; // Austria's population in 2020 according to Statistik Austria
 
-    //RAND NUMBERS VERSION 1: generate rand number array on CPU and copy to GPU
+    // RAND NUMBERS VERSION 1: generate rand number array on CPU and copy to GPU
+    // FOR RAND NUMBERS VERSION 2 check kernel
     num_rands = input->population_size * 2 * 365;
     input->rand_array = (double *)malloc(sizeof(double) * num_rands); // fill random number array
     srand(0);                                                         // initialize random seed
@@ -270,9 +272,6 @@ void init_input(SimInput_t *input)
     // RAND NUMBERS VERSION 1
     cudaMalloc(&input->rand_array_dev, sizeof(double) * (num_rands));
     cudaMemcpy(input->rand_array_dev, input->rand_array, sizeof(double) * (num_rands), cudaMemcpyHostToDevice);
-
-    // RAND NUMBERS VERSION 2
-    
 }
 
 // OUTPUT DATA

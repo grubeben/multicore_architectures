@@ -8,8 +8,8 @@
 7) technically the transmitting part in step3 [line 105] should be a sequential section but 
     i believe the likelyhood of two threads running into a read write conflict is very small
 
+X) Bonus: think of a nice refinement to the code? More complex transmission model (take vaccination status into account??)
 X) benchmarking the whole thing plus the random initialization options
-
 
 NOTES:
 - using atomic, so only working for rtx

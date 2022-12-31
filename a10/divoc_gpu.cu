@@ -11,13 +11,30 @@
 #define BLOCK_NUMBER 256
 #define THREADS_PER_BLOCK 256
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 // CUDA KERNELS ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+// RANDOM NUMBER GEN VERSION 2
+// use rank as seed0, PNRG output0 as see1 and so on
+__device__ double PNRG(double seed) //__device__ funtions can be called from kernels
+{
+// inspo: https://en.wikipedia.org/wiki/Linear_congruential_generator
+//        https://stackoverflow.com/questions/19140589/linear-congruential-generator-in-python
 
-// STEP 1 2 3 IN ONE KERNEL: 
+    // generator input
+    double m = pow(2, 32);
+    double a = 1103515245;
+    double c = 12345;
+
+    // generating PRN
+    double r = (a * seed + c) % m
+
+                                    // scale to [0,1]
+                                    r = r / (2 * *31 - 1) return r
+}
+
+// STEP 1 2 3 IN ONE KERNEL:
 // 1: determine number of infections and recoveries;
 // 2: determine today's transmission probability and contacts based on pandemic situation;
 // 3: pass on infections within population;
@@ -59,7 +76,7 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
         atomicAdd(output->active_infections_dev[day], num_infected_current_shared[0]);
     }
     // care for non-parallelizable stuff with only one thread
-    if (blockIdx.x * blockDim.x + threadIdx.x==0)
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
     {
         if (day > 0 && output->lockdown_dev[day - 1] == 1)
         { // end lockdown if number of infections has reduced significantly
@@ -69,43 +86,50 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
         char lockdown[] = " [LOCKDOWN]";
         char normal[] = "";
         printf("Day %d%s: %d active, %d recovered\n", day, output->lockdown_dev[day] ? lockdown : normal, active_infections_dev[day], num_recovered_current_shared[0]);
-    
 
-        //STEP2 
-        if (active_infections_dev[day] > input->mask_threshold) { // transmission is reduced with masks. Arbitrary factor: 2
-        input->transmission_probability_dev[day] /= 2.0;
+        // STEP2
+        if (active_infections_dev[day] > input->mask_threshold)
+        { // transmission is reduced with masks. Arbitrary factor: 2
+            input->transmission_probability_dev[day] /= 2.0;
         }
-        if (output->lockdown_dev[day]) { // contacts are significantly reduced in lockdown. Arbitrary factor: 4
-        input->contacts_per_day_dev[day] /= 4;
+        if (output->lockdown_dev[day])
+        { // contacts are significantly reduced in lockdown. Arbitrary factor: 4
+            input->contacts_per_day_dev[day] /= 4;
         }
     }
 
-    //not sure if necessary, but I want to ensure every thread grabs the manipulated values (STEP2)
+    // not sure if necessary, but I want to ensure every thread grabs the manipulated values (STEP2)
     __syncthreads();
 
     double contacts_today = input->contacts_per_day[day];
     double transmission_probability_today = input->transmission_probability[day];
 
-    //STEP 3 - we back in parallel mode
+    // STEP 3 - we back in parallel mode
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < input->population_size; i += blockDim.x * gridDim.x)
     {
-        if (output->is_infected_dev[i] > 0
-          && output->infected_on_dev[i] >  day - input->infection_delay - input->infection_days  // currently infected
-          && output->infected_on_dev[i] <= day - input->infection_delay)                         // already infectious
+        if (output->is_infected_dev[i] > 0 && output->infected_on_dev[i] > day - input->infection_delay - input->infection_days // currently infected
+            && output->infected_on_dev[i] <= day - input->infection_delay)                                                      // already infectious
         {
             // pass on infection to other persons with transmission probability
-            for (int j=0; j<contacts_today; ++j)
+            for (int j = 0; j < contacts_today; ++j)
             {
-                double r = input->rand_array_dev[i];  // random number between 0 and 1
-                if (r < transmission_probability_today)
+                // RANDOM NUMBER GEN PART //////////////////////////////////////////////////
+                // VERSION 1 - VIA CPU
+                double r1 = input->rand_array_dev[i];     // random number between 0 and 1
+                double r2 = input->rand_array_dev[2 * i]; // new random number to determine a random other person to transmit the virus to
+                // VERSION 2 - ON GPU
+                double r1 = PNRG((double)i);               
+                double r2 = PNRG(r1);        
+                ////////////////////////////////////////////////////////////////////////////
+
+                if (r1 < transmission_probability_today)
                 {
-                    r = input->rand_array_dev[2*i];       // new random number to determine a random other person to transmit the virus to
-                    int other_person = r * input->population_size;
+                    int other_person = r2 * input->population_size;
 
                     // SHOULD THIS BE A SEQUENTIAL SECTION?
                     ////////////////////////////////////////////////////////////////////////
-                    if (output->is_infected_dev[other_person] == 0     // other person is not infected
-                        || output->infected_on_dev[other_person] < day - input->immunity_duration)  // other person has no more immunity
+                    if (output->is_infected_dev[other_person] == 0                                 // other person is not infected
+                        || output->infected_on_dev[other_person] < day - input->immunity_duration) // other person has no more immunity
                     {
                         output->is_infected_dev[other_person] = 1;
                         output->infected_on_dev[other_person] = day;
@@ -122,7 +146,7 @@ void run_simulation_gpu(const SimInput_t *input, SimOutput_t *output)
 {
     for (int day = 0; day < 365; ++day) // loop over all days of the year
     {
-        cuda_step123<<<BLOCK_NUMBER, THREADS_PER_BLOCK>>>(day,input,output);
+        cuda_step123<<<BLOCK_NUMBER, THREADS_PER_BLOCK>>>(day, input, output);
 
         // hand back current_infections_dev back to CPU as task demands?
         // but we can simply print within kernel, why create overhead?
@@ -133,8 +157,7 @@ void run_simulation_gpu(const SimInput_t *input, SimOutput_t *output)
 // Data container //////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-//INPUT DATA
+// INPUT DATA
 typedef struct
 {
     ////////////////////
@@ -165,7 +188,7 @@ typedef struct
     double *transmission_probability_dev;
 } SimInput_t;
 
-//OUTPUT DATA
+// OUTPUT DATA
 typedef struct
 {
     ////////////////////
@@ -186,7 +209,7 @@ typedef struct
 
     // for each day:
     int *active_infections_dev;
-    int *active_recovered_dev; //number of recovered people for each day
+    int *active_recovered_dev; // number of recovered people for each day
     int *lockdown_dev;
 
     // step 1& step 3 : for each person
@@ -222,7 +245,6 @@ void destruction(SimInput_t input, SimOutput_t output)
 ////////////////////////////////////////////////////////////////////////////////////////////////
 // Data Initialization /////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 // INPUT DATA
 void init_input(SimInput_t *input)
@@ -309,7 +331,7 @@ void init_output(SimOutput_t *output, int population_size)
     cudaMemcpy(output->active_infections_dev, output->active_infections, sizeof(int) * 365, cudaMemcpyHostToDevice);
     cudaMemcpy(output->active_recovered_dev;, output->is_infected, sizeof(int) * 365, cudaMemcpyHostToDevice); // use is_infected to initialize with zeros
     cudaMemcpy(output->lockdown_dev, output->lockdown, sizeof(int) * 365, cudaMemcpyHostToDevice);
-    
+
     // step1 & step3
     cudaMalloc(&output->is_infected_dev, sizeof(int) * population_size);
     cudaMalloc(&output->infected_on_dev, sizeof(int) * population_size);

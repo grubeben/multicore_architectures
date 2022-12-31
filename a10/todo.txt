@@ -1,4 +1,4 @@
-1) move 'sick people on Jan 1' (start of simulation method) to init
+1) DEBUG;
 2) check whether it's allowed to pass struct element to kernels! (struct holds GPU mem elements as well as CPU mem elements)
 3) name device vectors such as infected_on_dev more clearly to differentiate from scalar constants?
     f.e. infected_on_DEV?
@@ -7,7 +7,6 @@
 7) technically the transmitting part in step3 [line 105] should be a sequential section but 
     i believe the likelyhood of two threads running into a read write conflict is very small
 
-X) Bonus: think of a nice refinement to the code? More complex transmission model (take vaccination status into account??)
 X) benchmarking the whole thing plus the random initialization options
 
 NOTES:

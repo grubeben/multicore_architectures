@@ -117,9 +117,17 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
                 // VERSION 1 - VIA CPU
                 double r1 = input->rand_array_dev[i];     // random number between 0 and 1
                 double r2 = input->rand_array_dev[2 * i]; // new random number to determine a random other person to transmit the virus to
+                double r3 = input->rand_array_dev[3 * i]; // new random number to determine a random other person to transmit the virus to
                 // VERSION 2 - ON GPU
                 double r1 = PNRG((double)i);               
                 double r2 = PNRG(r1);        
+                double r3 = PNRG(r2);        
+                ////////////////////////////////////////////////////////////////////////////
+
+                // BONUS: IS OTHER_PERSON VACCINATED? ////////////////////////////////////////////
+                if (r3 < vaccination_rate){
+                    transmission_probability_today /=2; // Likeliness of sickness outbreak is halfed im person is vaccinated
+                }
                 ////////////////////////////////////////////////////////////////////////////
 
                 if (r1 < transmission_probability_today)
@@ -215,6 +223,10 @@ typedef struct
     // step 1& step 3 : for each person
     int *is_infected_dev;
     int *infected_on_dev;
+
+    //BONUS
+    double vaccination_rate=0.74; // Gesundheitsministerium
+
 } SimOutput_t;
 
 // FREE DATA
@@ -257,7 +269,7 @@ void init_input(SimInput_t *input)
 
     // RAND NUMBERS VERSION 1: generate rand number array on CPU and copy to GPU
     // FOR RAND NUMBERS VERSION 2 check kernel
-    num_rands = input->population_size * 2 * 365;
+    num_rands = input->population_size * 3 * 365;
     input->rand_array = (double *)malloc(sizeof(double) * num_rands); // fill random number array
     srand(0);                                                         // initialize random seed
     for (int i = 0; i < num_rands; i++)

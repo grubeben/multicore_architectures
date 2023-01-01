@@ -1,4 +1,7 @@
-1) DEBUG;
+!!!
+1) PASSING STRUCT TO CUDA DOES NOT SEEM TO WORK (SEE population_size and vaccination_rate test) ==> fix that
+!!!
+
 2) change BLOCK_NUMBER THREADS_PER_BLOCK back to 256 256
 2) check whether it's allowed to pass struct element to kernels! (struct holds GPU mem elements as well as CPU mem elements)
 5) make sure all gpu arrays are included in the destructor

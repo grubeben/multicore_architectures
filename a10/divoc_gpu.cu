@@ -78,7 +78,8 @@ typedef struct
     int *infected_on_dev;
 
     // BONUS
-    double vaccination_rate = 0.74; // Gesundheitsministerium
+    double vaccination_rate; 
+    double *vaccination_rate_dev;
 
 } SimOutput_t;
 
@@ -202,6 +203,11 @@ void init_output(SimOutput_t *output, int population_size)
     cudaMalloc(&output->infected_on_dev, sizeof(int) * population_size);
     cudaMemcpy(output->is_infected_dev, output->is_infected, sizeof(int) * population_size, cudaMemcpyHostToDevice);
     cudaMemcpy(output->infected_on_dev, output->infected_on, sizeof(int) * population_size, cudaMemcpyHostToDevice);
+
+    // BONUS
+    output->vaccination_rate = 0.74; // Gesundheitsministerium
+    cudaMalloc(&output->vaccination_rate_dev, sizeof(double));
+    cudaMemcpy(output->vaccination_rate_dev, &output->vaccination_rate, sizeof(double), cudaMemcpyHostToDevice);
 }
 
 
@@ -237,6 +243,9 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
 {
     if (blockIdx.x * blockDim.x + threadIdx.x == 0)
         printf("RANK %d starting kernel \n", threadIdx.x);
+        printf("RANK %d: test 1 whether passing struct works: For scalars that are located on CPU: Population size %d \n", threadIdx.x, &input->population_size);
+        printf("RANK %d: test 2 whether passing struct works: For scalars that are located on GPU: Vaccination rate %f \n", threadIdx.x, &output->vaccination_rate);
+        printf("RANK %d: test 3 whether passing struct works: For array that are located on GPU: random number entry %f \n", threadIdx.x, &input->rand_array_dev);
         
     // STEP1
     // every thread counts the infected/recovered it handles (this is inspired by the dot product)

@@ -10,8 +10,8 @@
 #endif
 
 // KERNEL RUN PARAMETERS
-#define BLOCK_NUMBER 256
-#define THREADS_PER_BLOCK 256
+#define BLOCK_NUMBER 1
+#define THREADS_PER_BLOCK 1
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,6 +235,9 @@ __device__ double PNRG(int seed) //__device__ funtions can be called from kernel
 // 3: pass on infections within population;
 __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *output)
 {
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+        printf("RANK %d starting kernel \n", threadIdx.x);
+        
     // STEP1
     // every thread counts the infected/recovered it handles (this is inspired by the dot product)
     __shared__ int num_infected_current_shared[256];
@@ -245,6 +248,9 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
     int num_recovered_current_local = 0;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < input->population_size; i += blockDim.x * gridDim.x)
     {
+        if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+            printf("RANK %d entered infection counting loop \n", threadIdx.x);
+            
         if (output->is_infected_dev[i] > 0) // if person i is infected
         {
             if (output->infected_on_dev[i] > day - input->infection_delay - input->infection_days && output->infected_on_dev[i] <= day - input->infection_delay) // currently infected and incubation period over
@@ -253,6 +259,10 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
                 num_recovered_current_local += 1;
         }
     }
+
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+        printf("RANK %d counted local number of infections: %d \n", threadIdx.x, num_infected_current_local);
+
     // we need to sync threads here and reduce
     num_infected_current_shared[threadIdx.x] = num_infected_current_local;
     num_recovered_current_shared[threadIdx.x] = num_recovered_current_local;
@@ -265,14 +275,22 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
             num_recovered_current_shared[threadIdx.x] += num_recovered_current_shared[threadIdx.x + k];
         }
     }
+
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+        printf("RANK %d done with strides; block %d counted %d infections \n", threadIdx.x, blockIdx.x, num_infected_current_shared[threadIdx.x]);
+
     // after stride thread 0 holds block_sums, it will now AtomicAdd them to the ouput-> GPU arrays
     if (threadIdx.x == 0)
     {
         atomicAdd(&output->active_infections_dev[day], num_infected_current_shared[0]);
+        printf("RANK %d perfomrmed AtomicAdd; all blocks counted %d  \n", threadIdx.x, output->active_infections_dev[day]);
+
     }
     // care for non-parallelizable stuff with only one thread
     if (blockIdx.x * blockDim.x + threadIdx.x == 0)
     {
+        printf("RANK %d of block %d started serial, one-thread section \n", threadIdx.x, blockIdx.x);
+
         if (day > 0 && output->lockdown_dev[day - 1] == 1)
         { // end lockdown if number of infections has reduced significantly
             output->lockdown_dev[day] = (output->active_infections_dev[day] < input->lockdown_threshold / 3) ? 0 : 1;
@@ -300,6 +318,9 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
     double transmission_probability_today = input->transmission_probability[day];
 
     // STEP 3 - we back in parallel mode
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+        printf("RANK %d starts into STEP \n", threadIdx.x);
+
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < input->population_size; i += blockDim.x * gridDim.x)
     {
         if (output->is_infected_dev[i] > 0 && output->infected_on_dev[i] > day - input->infection_delay - input->infection_days // currently infected
@@ -313,11 +334,15 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
                 double r1 = input->rand_array_dev[i];     // random number between 0 and 1
                 double r2 = input->rand_array_dev[2 * i]; // new random number to determine a random other person to transmit the virus to
                 double r3 = input->rand_array_dev[3 * i]; // new random number to determine a random other person to transmit the virus to
+                
                 // VERSION 2 - ON GPU
                 // double r1 = PNRG(i);
                 // double r2 = PNRG(int (10*r1));
                 // double r3 = PNRG(int(10*r2));
                 ////////////////////////////////////////////////////////////////////////////
+
+                 if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+                    printf("RANK %d received these 3 random numbers: %f %f %f \n", r1,r2,r3);
 
                 // BONUS: IS OTHER_PERSON VACCINATED? ////////////////////////////////////////////
                 if (r3 < output->vaccination_rate)
@@ -340,6 +365,9 @@ __global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *outp
                     }
                     ///////////////////////////////////////////////////////////////////////
                 }
+                if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+                    printf("RANK %d is done with kernel \n");
+
             }
         }
     }
@@ -351,6 +379,7 @@ void run_simulation_gpu(const SimInput_t *input, SimOutput_t *output)
     for (int day = 0; day < 365; ++day) // loop over all days of the year
     {
         cuda_step123<<<BLOCK_NUMBER, THREADS_PER_BLOCK>>>(day, input, output);
+        cudaDeviceSynchronize();
 
         // hand back current_infections_dev back to CPU as task demands?
         // but we can simply print within kernel, why create overhead?

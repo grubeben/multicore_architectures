@@ -1,5 +1,8 @@
 !!!
 1) PASSING STRUCT TO CUDA DOES NOT SEEM TO WORK (SEE population_size and vaccination_rate test) ==> fix that
+
+==> It appears mallocing elements within struct is not a good idea, JUST PASS THE WHOLE STRUCT
+https://stackoverflow.com/questions/4176762/passing-structs-to-cuda-kernels
 !!!
 
 2) change BLOCK_NUMBER THREADS_PER_BLOCK back to 256 256

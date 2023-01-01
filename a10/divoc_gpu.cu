@@ -239,7 +239,7 @@ __device__ double PNRG(int seed) //__device__ funtions can be called from kernel
 // 1: determine number of infections and recoveries;
 // 2: determine today's transmission probability and contacts based on pandemic situation;
 // 3: pass on infections within population;
-__global__ void cuda_step123(int day, const SimInput_t *input, SimOutput_t *output)
+__global__ void cuda_step123(int day, SimInput_t *input, SimOutput_t *output)
 {
     if (blockIdx.x * blockDim.x + threadIdx.x == 0)
         printf("RANK %d starting kernel \n", threadIdx.x);

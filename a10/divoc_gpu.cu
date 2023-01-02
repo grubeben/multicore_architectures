@@ -11,7 +11,7 @@
 
 // KERNEL RUN PARAMETERS
 #define BLOCK_NUMBER 1
-#define THREADS_PER_BLOCK 1
+#define THREADS_PER_BLOCK 5
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,12 +125,16 @@ void init_input(SimInput_t *input)
     // RAND NUMBERS VERSION 1: generate rand number array on CPU and copy to GPU
     // FOR RAND NUMBERS VERSION 2 check kernel
     int num_rands = input->population_size * 3 * 365;
-    input->rand_array = (double *)malloc(sizeof(double) * num_rands); // fill random number array
+    input->rand_array = (double *)malloc(sizeof(double) * num_rands); // fill random number array+
+    std::fill(input->rand_array, input->rand_array+num_rands,0);
+    
     srand(0);                                                         // initialize random seed
     for (int i = 0; i < num_rands; i++)
     {
-        input->rand_array[i] = ((double)rand()) / (double)RAND_MAX; // random number between 0 and 1
+        input->rand_array[i] = ((double)rand()) / (double)(RAND_MAX+1.0); // random number between 0 and 1
     }
+    //better??
+    //std::generate(input->rand_array, input->rand_array + num_rands, [&](){return rand()%0x7fffffff;});
 
     input->mask_threshold = 5000;
     input->lockdown_threshold = 50000;
@@ -165,7 +169,7 @@ void init_input(SimInput_t *input)
 }
 
 // OUTPUT DATA
-void init_output(SimOutput_t *output, int population_size)
+void init_output(SimOutput_t *output, SimInput_t *input)
 {
     ////////////////////
     // CPU ressources //
@@ -179,16 +183,13 @@ void init_output(SimOutput_t *output, int population_size)
         output->lockdown[day] = 0;
     }
 
-    output->is_infected = (int *)malloc(sizeof(int) * population_size);
-    output->infected_on = (int *)malloc(sizeof(int) * population_size);
+    output->is_infected = (int *)malloc(sizeof(int) * input->population_size);
+    output->infected_on = (int *)malloc(sizeof(int) * input->population_size);
 
-    for (int i = 0; i < population_size; ++i)
+    for (int i = 0; i < input->population_size; ++i)
     {
-        if (i < 1000)
-            output->is_infected[i] = 1;
-        else
-            output->is_infected[i] = 0;
-        output->infected_on[i] = 0;
+        output->is_infected[i] = (i < input->starting_infections) ? 1 : 0;
+        output->infected_on[i] = (i < input->starting_infections) ? 0 : -1;
     }
 
     // BONUS
@@ -207,10 +208,10 @@ void init_output(SimOutput_t *output, int population_size)
     cudaMemcpy(output->lockdown_dev, output->lockdown, sizeof(int) * 365, cudaMemcpyHostToDevice);
 
     // step1 & step3
-    cudaMalloc(&output->is_infected_dev, sizeof(int) * population_size);
-    cudaMalloc(&output->infected_on_dev, sizeof(int) * population_size);
-    cudaMemcpy(output->is_infected_dev, output->is_infected, sizeof(int) * population_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(output->infected_on_dev, output->infected_on, sizeof(int) * population_size, cudaMemcpyHostToDevice);
+    cudaMalloc(&output->is_infected_dev, sizeof(int) * input->population_size);
+    cudaMalloc(&output->infected_on_dev, sizeof(int) * input->population_size);
+    cudaMemcpy(output->is_infected_dev, output->is_infected, sizeof(int) * input->population_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(output->infected_on_dev, output->infected_on, sizeof(int) * input->population_size, cudaMemcpyHostToDevice);
 
     // BONUS
     output->vaccination_rate = 0.74; // Gesundheitsministerium
@@ -274,8 +275,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
         }
     }
 
-    // if (blockIdx.x * blockDim.x + threadIdx.x == 0)
-        // printf("RANK %d counted local number of infections: %d \n", threadIdx.x, num_infected_current_local);
+    printf("RANK %d counted local number of infections: %d \n", threadIdx.x, num_infected_current_local);
 
     // we need to sync threads here and reduce
     num_infected_current_shared[threadIdx.x] = num_infected_current_local;
@@ -289,17 +289,16 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
             num_recovered_current_shared[threadIdx.x] += num_recovered_current_shared[threadIdx.x + k];
         }
     }
-
-    if (blockIdx.x * blockDim.x + threadIdx.x == 0)
-        printf("RANK %d done with strides; block %d counted %d infections \n", threadIdx.x, blockIdx.x, num_infected_current_shared[threadIdx.x]);
-
-    // after stride thread 0 holds block_sums, it will now AtomicAdd them to the ouput. GPU arrays
+    
     if (threadIdx.x == 0)
     {
+        printf("RANK %d done with strides; block %d counted %d infections \n", threadIdx.x, blockIdx.x, num_infected_current_shared[threadIdx.x]);
+
+        // after stride thread 0 holds block_sums, it will now AtomicAdd them to the ouput. GPU arrays
         atomicAdd(&output.active_infections_dev[day], num_infected_current_shared[0]);
         // printf("RANK %d perfomrmed AtomicAdd; all blocks counted %d  \n", threadIdx.x, output.active_infections_dev[day]);
+    }   
 
-    }
     // care for non-parallelizable stuff with only one thread
     if (blockIdx.x * blockDim.x + threadIdx.x == 0)
     {
@@ -312,7 +311,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
         // daily announcement
         char lockdown[] = " [LOCKDOWN]";
         char normal[] = "";
-        printf("Day %d%s: %d active, %d recovered\n", day, output.lockdown_dev[day] ? lockdown : normal, output.active_infections_dev[day], num_recovered_current_shared[0]);
+        printf("Day %d%s: %d active, %d recovered\n\n", day, output.lockdown_dev[day] ? lockdown : normal, output.active_infections_dev[day], num_recovered_current_shared[0]);
 
         // STEP2
         if (output.active_infections_dev[day] > input.mask_threshold)
@@ -345,23 +344,27 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
             {
                 // RANDOM NUMBER GEN PART //////////////////////////////////////////////////
                 // VERSION 1 - VIA CPU
-                double r1 = input.rand_array_dev[i];     // random number between 0 and 1
-                double r2 = input.rand_array_dev[2 * i]; // new random number to determine a random other person to transmit the virus to
-                double r3 = input.rand_array_dev[3 * i]; // new random number to determine a random other person to transmit the virus to
+                double r1 = input.rand_array_dev[i+day];     // random number between 0 and 1
+                double r2 = input.rand_array_dev[2 * (i+day)]; // new random number to determine a random other person to transmit the virus to
+                double r3 = input.rand_array_dev[3 * (i+day)]; // new random number to determine a random other person to transmit the virus to
+                if (r1 == 0.0 || r2 == 0.0|| r3 == 0.0)
+                    printf("!! random number 0\n");
+                if (r1> (double) 1.0 || r2 > (double) 1.0|| r3 > (double) 1.0)
+                    printf("!! random number Invalid: %f %f %f\n",r1,r2,r3);
                 
                 // VERSION 2 - ON GPU
-                // double r1 = PNRG(i);
-                // double r2 = PNRG(int (10*r1));
-                // double r3 = PNRG(int(10*r2));
+                // double r1 = PNRG(i+day);
+                // double r2 = PNRG(int (10*(r1+day)));
+                // double r3 = PNRG(int(10*(r2+day)));
                 ////////////////////////////////////////////////////////////////////////////
 
-                //  if (blockIdx.x * blockDim.x + threadIdx.x == 0)
-                //     printf("RANK %d received these 3 random numbers: %f %f %f \n", r1,r2,r3);
+                // if (blockIdx.x * blockDim.x + threadIdx.x == 0)
+                //     printf("RANK %d received these 3 random numbers: %f %f %f \n", blockIdx.x * blockDim.x + threadIdx.x, r1,r2,r3);
 
                 // BONUS: IS OTHER_PERSON VACCINATED? ////////////////////////////////////////////
-                if (r3 < output.vaccination_rate)
+                if (r3 > output.vaccination_rate)
                 {
-                    transmission_probability_today /= 2; // Likeliness of sickness outbreak is halfed im person is vaccinated
+                    transmission_probability_today /= 1; // Likeliness of sickness outbreak is halfed im person is vaccinated
                 }
                 ////////////////////////////////////////////////////////////////////////////
 
@@ -388,12 +391,11 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
 }
 
 // KERNEL WRAP; init_input and init_output must be called prior because they fill dev arrays
-void run_simulation_gpu(SimInput_t input, SimOutput_t output)
+void run_simulation_gpu(SimInput_t input, SimOutput_t output, int num_days)
 {
     int subject_of_log=1;
-    for (int day = 0; day < 20; ++day) // loop over all days of the year
+    for (int day = 0; day < num_days; ++day) // loop over all days of the year
     {
-
         cuda_step123<<<BLOCK_NUMBER, THREADS_PER_BLOCK>>>(day, input, output);
         cudaDeviceSynchronize();
 
@@ -402,7 +404,7 @@ void run_simulation_gpu(SimInput_t input, SimOutput_t output)
 
         // increase vaccination rate
         subject_of_log+=0.0137;
-        output.vaccination_rate+= log10(subject_of_log);
+        output.vaccination_rate= log10(subject_of_log);
     }
 }
 
@@ -416,29 +418,16 @@ int main(int argc, char **argv)
 
     SimInput_t input;
     SimOutput_t output;
-    // SimInput_t* input_gpu;
-    // SimOutput_t* output_gpu;
 
     // initiliaze on host (and vopy to device)
     init_input(&input);
-    init_output(&output, input.population_size);
+    init_output(&output, &input);
 
-    // // allocate memory
-    // int inputSize    = sizeof(SimInput_t);
-    // int outputSize    = sizeof(SimOutput_t);
-
-    // cudaMalloc((SimInput_t**)&input_gpu, inputSize); //stack uses void**
-    // cudaMalloc((SimOutput_t**)&output_gpu, outputSize);
-
-    // // bring over CPU data
-    // cudaMemcpy(input_gpu, &input, inputSize, cudaMemcpyHostToDevice);
-    // cudaMemcpy(output_gpu, &output, outputSize, cudaMemcpyHostToDevice);
-    
     // Go though simulation
     Timer timer;
 
     timer.reset();
-    run_simulation_gpu(input, output);
+    run_simulation_gpu(input, output, 15);
     printf("Simulation time: %g\n", timer.get());
 
     destruction(input, output);

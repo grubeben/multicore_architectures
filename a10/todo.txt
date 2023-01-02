@@ -1,13 +1,10 @@
 !!!
-1) PASSING STRUCT TO CUDA DOES NOT SEEM TO WORK (SEE population_size and vaccination_rate test) ==> fix that
-
-==> It appears mallocing elements within struct is not a good idea, JUST PASS THE WHOLE STRUCT
-https://stackoverflow.com/questions/4176762/passing-structs-to-cuda-kernels
+1) different results for different BLOCK_NUMBER THREADS_PER_BLOCK, find inconsistency!
+==> reduce operation does not work (sums up only 8 of 10 infections in the beginning) ??
 !!!
 
-2) BONUS: let vaccination rate increase every day log(6) = 0.78 maximum
+2) SET IMPACT OF VACCINATION RATE (line 361)
 2) change BLOCK_NUMBER THREADS_PER_BLOCK back to 256 256
-2) check whether it's allowed to pass struct element to kernels! (struct holds GPU mem elements as well as CPU mem elements)
 5) make sure all gpu arrays are included in the destructor
 6) are there any SNYC points necessary in the kernel? prior to step 3?
 7) technically the transmitting part in step3 [line 105] should be a sequential section but 

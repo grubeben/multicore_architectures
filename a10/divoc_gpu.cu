@@ -194,6 +194,7 @@ void init_output(SimOutput_t *output, SimInput_t *input)
 
     // BONUS
     output->vaccination_rate = log10(1); // vaccination rate at start of the year = 0
+    int active_recovered=0;
 
     ////////////////////
     // GPU ressources //
@@ -201,10 +202,10 @@ void init_output(SimOutput_t *output, SimInput_t *input)
 
     // step2
     cudaMalloc(&output->active_infections_dev, sizeof(int) * 365);
-    cudaMalloc(&output->active_recovered_dev, sizeof(int) * 365);
+    cudaMalloc(&output->active_recovered_dev, sizeof(int)* 365);
     cudaMalloc(&output->lockdown_dev, sizeof(int) * 365);
     cudaMemcpy(output->active_infections_dev, output->active_infections, sizeof(int) * 365, cudaMemcpyHostToDevice);
-    cudaMemcpy(output->active_recovered_dev, output->is_infected, sizeof(int) * 365, cudaMemcpyHostToDevice); // use is_infected to initialize with zeros
+    cudaMemcpy(output->active_recovered_dev, output->infected_on, sizeof(int) * 365, cudaMemcpyHostToDevice); // use is_infected to initialize with zeros
     cudaMemcpy(output->lockdown_dev, output->lockdown, sizeof(int) * 365, cudaMemcpyHostToDevice);
 
     // step1 & step3
@@ -214,7 +215,6 @@ void init_output(SimOutput_t *output, SimInput_t *input)
     cudaMemcpy(output->infected_on_dev, output->infected_on, sizeof(int) * input->population_size, cudaMemcpyHostToDevice);
 
     // BONUS
-    output->vaccination_rate = 0.74; // Gesundheitsministerium
     cudaMalloc(&output->vaccination_rate_dev, sizeof(double));
     cudaMemcpy(output->vaccination_rate_dev, &output->vaccination_rate, sizeof(double), cudaMemcpyHostToDevice);
 }
@@ -295,6 +295,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
 
         // after stride thread 0 holds block_sums, it will now AtomicAdd them to the ouput. GPU arrays
         atomicAdd(&output.active_infections_dev[day], num_infected_current_shared[0]);
+        atomicAdd(&output.active_recovered_dev[day], num_recovered_current_shared[0]);
         // printf("RANK %d perfomrmed AtomicAdd; all blocks counted %d  \n", threadIdx.x, output.active_infections_dev[day]);
     }   
 
@@ -312,7 +313,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
         // daily announcement
         char lockdown[] = " [LOCKDOWN]";
         char normal[] = "";
-        printf("Day %d%s: %d active, %d recovered\n\n", day, output.lockdown_dev[day] ? lockdown : normal, output.active_infections_dev[day], num_recovered_current_shared[0]);
+        printf("Day %d%s: %d active, %d recovered\n\n", day, output.lockdown_dev[day] ? lockdown : normal, output.active_infections_dev[day], output.active_recovered_dev[day]);
 
         // STEP2
         if (output.active_infections_dev[day] > input.mask_threshold)

@@ -10,8 +10,8 @@
 #endif
 
 // KERNEL RUN PARAMETERS
-#define BLOCK_NUMBER 1
-#define THREADS_PER_BLOCK 5
+#define BLOCK_NUMBER 256
+#define THREADS_PER_BLOCK 256
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -240,7 +240,7 @@ __device__ double PNRG(int seed) //__device__ funtions can be called from kernel
 
     // scale to [0,1]
     double r_scale = r / (pow(2,31) - 1);
-    return r_scale;
+    return abs(r_scale);
 }
 
 // STEP 1 2 3 IN ONE KERNEL:
@@ -275,8 +275,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
         }
     }
 
-    printf("RANK %d counted local number of infections: %d \n", threadIdx.x, num_infected_current_local);
-
+    // printf("RANK %d counted local number of infections: %d \n", threadIdx.x, num_infected_current_local);
     // we need to sync threads here and reduce
     num_infected_current_shared[threadIdx.x] = num_infected_current_local;
     num_recovered_current_shared[threadIdx.x] = num_recovered_current_local;
@@ -292,18 +291,20 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
     
     if (threadIdx.x == 0)
     {
-        printf("RANK %d done with strides; block %d counted %d infections \n", threadIdx.x, blockIdx.x, num_infected_current_shared[threadIdx.x]);
+        // printf("RANK %d done with strides; block %d counted %d infections \n", threadIdx.x, blockIdx.x, num_infected_current_shared[threadIdx.x]);
 
         // after stride thread 0 holds block_sums, it will now AtomicAdd them to the ouput. GPU arrays
         atomicAdd(&output.active_infections_dev[day], num_infected_current_shared[0]);
         // printf("RANK %d perfomrmed AtomicAdd; all blocks counted %d  \n", threadIdx.x, output.active_infections_dev[day]);
     }   
 
+    __syncthreads();
+
     // care for non-parallelizable stuff with only one thread
     if (blockIdx.x * blockDim.x + threadIdx.x == 0)
     {
         // printf("RANK %d of block %d started serial, one-thread section \n", threadIdx.x, blockIdx.x);
-
+        if (output.active_infections_dev[day] > input.lockdown_threshold) {output.lockdown_dev[day] = 1;}
         if (day > 0 && output.lockdown_dev[day - 1] == 1)
         { // end lockdown if number of infections has reduced significantly
             output.lockdown_dev[day] = (output.active_infections_dev[day] < input.lockdown_threshold / 3) ? 0 : 1;
@@ -344,22 +345,25 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
             {
                 // RANDOM NUMBER GEN PART //////////////////////////////////////////////////
                 // VERSION 1 - VIA CPU
-                double r1 = input.rand_array_dev[i+day];     // random number between 0 and 1
-                double r2 = input.rand_array_dev[2 * (i+day)]; // new random number to determine a random other person to transmit the virus to
-                double r3 = input.rand_array_dev[3 * (i+day)]; // new random number to determine a random other person to transmit the virus to
+                // double r1 = input.rand_array_dev[j+(i+day)];     // random number between 0 and 1
+                // double r2 = input.rand_array_dev[2 * (input.population_size +day)+i]; // new random number to determine a random other person to transmit the virus to
+                // double r3 = input.rand_array_dev[3 * (input.population_size +day)+i]; // new random number to determine a random other person to transmit the virus to
+
+                
+                // VERSION 2 - ON GPU
+                double r1 = PNRG(i+day+j);
+                double r2 = PNRG(int (10*(r1+day+j)));
+                double r3 = PNRG(int(10*(r2+day+j)));
+
+                //TEST
                 if (r1 == 0.0 || r2 == 0.0|| r3 == 0.0)
                     printf("!! random number 0\n");
                 if (r1> (double) 1.0 || r2 > (double) 1.0|| r3 > (double) 1.0)
                     printf("!! random number Invalid: %f %f %f\n",r1,r2,r3);
-                
-                // VERSION 2 - ON GPU
-                // double r1 = PNRG(i+day);
-                // double r2 = PNRG(int (10*(r1+day)));
-                // double r3 = PNRG(int(10*(r2+day)));
                 ////////////////////////////////////////////////////////////////////////////
 
                 // if (blockIdx.x * blockDim.x + threadIdx.x == 0)
-                //     printf("RANK %d received these 3 random numbers: %f %f %f \n", blockIdx.x * blockDim.x + threadIdx.x, r1,r2,r3);
+                // printf("RANK %d received these 3 random numbers: %f %f %f \n", blockIdx.x * blockDim.x + threadIdx.x, r1,r2,r3);
 
                 // BONUS: IS OTHER_PERSON VACCINATED? ////////////////////////////////////////////
                 if (r3 > output.vaccination_rate)
@@ -368,6 +372,7 @@ __global__ void cuda_step123(int day, SimInput_t input, SimOutput_t output)
                 }
                 ////////////////////////////////////////////////////////////////////////////
 
+                
                 if (r1 < transmission_probability_today)
                 {
                     int other_person = r2 * input.population_size;
@@ -427,7 +432,7 @@ int main(int argc, char **argv)
     Timer timer;
 
     timer.reset();
-    run_simulation_gpu(input, output, 15);
+    run_simulation_gpu(input, output, 365);
     printf("Simulation time: %g\n", timer.get());
 
     destruction(input, output);
